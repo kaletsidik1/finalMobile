@@ -1,0 +1,110 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+
+# Flutter specific
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Flutter/flutter_assets/
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
+Podfile.lock
+Pods/
+
+# Android specific
+android/local.properties
+android/app/src/main/gen/
+android/app/src/main/res/drawable-*
+
+# Web specific
+web/index.html
+web/manifest.json
+
+# Windows specific
+windows/flutter/generated_plugins.cmake
+windows/flutter/generated_plugin_registrant.cc
+windows/flutter/generated_plugin_registrant.h
+
+# macOS specific
+macos/Flutter/GeneratedPluginRegistrant.swift
+macos/Flutter/ephemeral/
+macos/Flutter/flutter_export_environment.sh
+
+# Linux specific
+linux/flutter/generated_plugins.cmake
+linux/flutter/generated_plugin_registrant.cc
+linux/flutter/generated_plugin_registrant.h
+
+# Environment files (sensitive data)
+.env
+.env.local
+.env.production
+*.env
+
+# API keys and secrets
+**/secrets.dart
+**/api_keys.dart
+**/google-services.json
+**/GoogleService-Info.plist
+
+# User-specific files
+*.user
+*.userosscache
+*.sln.docstates
+
+# Firebase files (unless you need them in repo)
+**/firebase_options.dart
+
+# Cache directories
+.cache/
+.temp/
+tmp/
+
+# Backup files
+*.bak
+*~
+*.swp
+*.swo
