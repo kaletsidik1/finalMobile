@@ -79,10 +79,9 @@ linux/flutter/generated_plugin_registrant.cc
 linux/flutter/generated_plugin_registrant.h
 
 # Environment files (sensitive data)
-.env
+
 .env.local
 .env.production
-*.env
 
 # API keys and secrets
 **/secrets.dart

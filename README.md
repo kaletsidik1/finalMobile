@@ -29,15 +29,16 @@ Use these credentials to try the app quickly:
 
 | Role | Email | Password |
 |------|--------|----------|
-| **Farmer** | `imbisru@gmail.com` | `Bisru12345` |
+| **Farmer** | `imbisru@gmail.com` | `Bisru12345.` |
+| **trader** | `trader@gmail.com` | `Bisru12345.` |
 
 **Traders:** In production, new trader accounts must be **approved by an admin** before they can log in.
 
-**For testing:** To keep review simple, we configure the system so **all accounts can be approved by admin**reviewers can sign up as a trader and use an admin account to approve them, then log in.
+**For testing:** To keep review simple, we configure the system so **all accounts can be approved by admin**For this time only all users can simply enter the system with default value of verification status of APPROVED but in the real system for each trader admins will have the responsibility to approve them.
 
 ## Run the App
 
 1. Install [Flutter](https://docs.flutter.dev/get-started/install).
 2. From this folder: `flutter pub get`
 3. Start the backend from [AgriMarket](https://github.com/Bisruxa/AgriMarket.git) (see that repos README).
-4. Run: `flutter run`
+4. Run: `flutter run` ( since the )
