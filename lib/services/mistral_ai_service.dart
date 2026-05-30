@@ -65,7 +65,7 @@ Soil & climate inputs:
 - Temperature (°C): $temperature
 - Humidity (%): $humidity
 - Soil pH: $ph
-${regionLine}- Rainfall (mm): $rainfall
+$regionLine- Rainfall (mm): $rainfall
 - Soil color: $soilColor
 
 Respond with ONLY valid JSON (no markdown), exactly this shape:
@@ -123,32 +123,91 @@ predicted_price and confidence_interval values are numbers in ETB per kg.
     return _chatJson(prompt);
   }
 
-  Future<Map<String, dynamic>> _chatJson(String userPrompt) async {
-    final response = await _client.post<Map<String, dynamic>>(
-      '/chat/completions',
-      data: {
-        'model': EnvConfig.mistralModel,
-        'messages': [
-          {
-            'role': 'system',
-            'content':
-                'You respond only with valid JSON objects. No prose, no markdown fences.',
-          },
-          {'role': 'user', 'content': userPrompt},
-        ],
-        'temperature': 0.3,
-        'response_format': {'type': 'json_object'},
-      },
-    );
+  /// Free-form farming assistant chat (used by farmer chat screen).
+  Future<String> chat({
+    required String userMessage,
+    List<Map<String, String>> history = const [],
+    String? region,
+  }) async {
+    _ensureConfigured();
 
-    final status = response.statusCode ?? 0;
-    if (status < 200 || status >= 300) {
-      final msg = _errorFromBody(response.data);
-      throw Exception(msg ?? 'Mistral API error ($status)');
+    final messages = <Map<String, dynamic>>[
+      {'role': 'system', 'content': _farmingSystemPrompt(region)},
+      ...history.map((m) => {'role': m['role'], 'content': m['content']}),
+      {'role': 'user', 'content': userMessage},
+    ];
+
+    return _chatCompletion(messages: messages, temperature: 0.6);
+  }
+
+  static String _farmingSystemPrompt(String? region) {
+    final regionLine = region != null && region.isNotEmpty
+        ? 'The farmer is based in $region, Ethiopia.'
+        : 'The farmer is in Ethiopia.';
+
+    return '''
+You are AgriMarket AI, a practical farming assistant for Ethiopian smallholder farmers.
+$regionLine
+
+Guidelines:
+- Give clear, actionable advice on crops (teff, wheat, maize, barley, coffee, etc.), soil, rainfall seasons, pests, and local practices.
+- Use short paragraphs and bullet lists when helpful. Stay under 200 words unless the user asks for detail.
+- Mention prices in Ethiopian Birr (ETB) only as rough guidance, not guarantees.
+- For precise crop rankings from soil lab data, tell them to use the menu: "Get Crop Recommendation".
+- For market price forecasts by month/region, tell them to use "Get Price Forecast" in the menu.
+- If unsure, say what you know and what data would help.
+- Be warm and supportive; avoid jargon.
+''';
+  }
+
+  Future<Map<String, dynamic>> _chatJson(String userPrompt) async {
+    final content = await _chatCompletion(
+      messages: [
+        {
+          'role': 'system',
+          'content':
+              'You respond only with valid JSON objects. No prose, no markdown fences.',
+        },
+        {'role': 'user', 'content': userPrompt},
+      ],
+      temperature: 0.3,
+      jsonMode: true,
+    );
+    return _parseJsonContent(content);
+  }
+
+  Future<String> _chatCompletion({
+    required List<Map<String, dynamic>> messages,
+    double temperature = 0.5,
+    bool jsonMode = false,
+  }) async {
+    final data = <String, dynamic>{
+      'model': EnvConfig.mistralModel,
+      'messages': messages,
+      'temperature': temperature,
+      'max_tokens': 1024,
+    };
+    if (jsonMode) {
+      data['response_format'] = {'type': 'json_object'};
     }
 
-    final content = _extractMessageContent(response.data);
-    return _parseJsonContent(content);
+    try {
+      final response = await _client.post<Map<String, dynamic>>(
+        '/chat/completions',
+        data: data,
+      );
+
+      final status = response.statusCode ?? 0;
+      if (status < 200 || status >= 300) {
+        final msg = _errorFromBody(response.data);
+        throw Exception(msg ?? 'Mistral API error ($status)');
+      }
+
+      return _extractMessageContent(response.data);
+    } on DioException catch (e) {
+      final msg = _errorFromBody(e.response?.data);
+      throw Exception(msg ?? e.message ?? 'Network error contacting Mistral');
+    }
   }
 
   String _extractMessageContent(Map<String, dynamic>? body) {

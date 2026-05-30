@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../config/env_config.dart';
 import '../../services/api_service.dart';
+import '../../services/mistral_ai_service.dart';
 import '../../theme/app_theme.dart';
 
 class FarmerChatScreen extends StatefulWidget {
@@ -25,9 +27,13 @@ class _FarmerChatScreenState extends State<FarmerChatScreen> {
     super.initState();
     _messages.add(
       _ChatMessage.assistant(
-        'Hello! I\'m your AgriMarket farming assistant.\n\n'
-        'Tap the menu (☰) to get crop recommendations or price forecasts, '
-        'or type a question below.',
+        EnvConfig.useMistralAi
+            ? 'Hello! I\'m your AgriMarket farming assistant.\n\n'
+                'Ask me about crops, soil, seasons, or markets in Ethiopia — '
+                'or use the menu (☰) for detailed crop recommendations and price forecasts.'
+            : 'Hello! I\'m your AgriMarket farming assistant.\n\n'
+                'Add your Mistral API key in .env to enable chat answers. '
+                'You can still use the menu (☰) for crop recommendations and price forecasts.',
       ),
     );
   }
@@ -55,6 +61,26 @@ class _FarmerChatScreenState extends State<FarmerChatScreen> {
     _scrollToBottom();
   }
 
+  List<Map<String, String>> _conversationHistory() {
+    if (_messages.length <= 1) return [];
+
+    final prior = _messages.sublist(0, _messages.length - 1);
+    final history = prior
+        .map(
+          (m) => {
+            'role': m.isUser ? 'user' : 'assistant',
+            'content': m.text,
+          },
+        )
+        .toList();
+
+    const maxMessages = 20;
+    if (history.length > maxMessages) {
+      return history.sublist(history.length - maxMessages);
+    }
+    return history;
+  }
+
   Future<void> _sendUserText(String text) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty || _isTyping) return;
@@ -63,17 +89,44 @@ class _FarmerChatScreenState extends State<FarmerChatScreen> {
     _inputController.clear();
 
     setState(() => _isTyping = true);
-    await Future<void>.delayed(const Duration(milliseconds: 400));
 
-    if (!mounted) return;
-    setState(() => _isTyping = false);
+    try {
+      if (!EnvConfig.useMistralAi) {
+        _addMessage(
+          _ChatMessage.assistant(
+            'Chat replies need a Mistral API key.\n\n'
+            'Add MISTRAL_API_KEY to your .env file and restart the app. '
+            'You can still use the menu (☰) for crop recommendations and price forecasts.',
+          ),
+        );
+        return;
+      }
 
-    _addMessage(
-      _ChatMessage.assistant(
-        'Thanks for your message. For crop recommendations or price forecasts, '
-        'open the menu (☰) at the top right and choose an option.',
-      ),
-    );
+      final region = widget.defaultRegion?.trim();
+      final reply = await MistralAiService().chat(
+        userMessage: trimmed,
+        history: _conversationHistory(),
+        region: region != null && region.isNotEmpty ? region : null,
+      );
+
+      if (!mounted) return;
+      _addMessage(_ChatMessage.assistant(reply.trim()));
+    } catch (e) {
+      if (!mounted) return;
+      _addMessage(
+        _ChatMessage.assistant(
+          'Sorry, I could not answer that right now.\n'
+          '${e.toString().replaceFirst('Exception: ', '')}',
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isTyping = false);
+    }
+  }
+
+  String _formatCropName(String raw) {
+    if (raw.isEmpty) return raw;
+    return raw[0].toUpperCase() + raw.substring(1);
   }
 
   Future<void> _runCropRecommendation(Map<String, dynamic> form) async {
@@ -101,8 +154,11 @@ class _FarmerChatScreenState extends State<FarmerChatScreen> {
         final item = recs[i] as Map<String, dynamic>;
         final crop = item['crop']?.toString() ?? 'Unknown';
         final confidence = item['confidence']?.toString() ?? '—';
-        final pct = (double.tryParse(confidence) ?? 0) * 100;
-        buffer.writeln('${i + 1}. $crop — ${pct.toStringAsFixed(0)}% confidence');
+        var confValue = double.tryParse(confidence) ?? 0;
+        if (confValue > 0 && confValue <= 1) confValue *= 100;
+        buffer.writeln(
+          '${i + 1}. ${_formatCropName(crop)} — ${confValue.toStringAsFixed(0)}% match',
+        );
       }
       buffer.write(
         '\nThese results are based on your soil nutrients, pH, and climate inputs.',

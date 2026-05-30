@@ -10,21 +10,15 @@ class MarketplaceScreen extends StatefulWidget {
   const MarketplaceScreen({super.key});
 
   @override
-  State<MarketplaceScreen> createState() => _MarketplaceScreenState();
+  State<MarketplaceScreen> createState() => MarketplaceScreenState();
 }
 
-class _MarketplaceScreenState extends State<MarketplaceScreen> {
+class MarketplaceScreenState extends State<MarketplaceScreen> {
   final ApiService _apiService = ApiService();
   List<Product> products = [];
   bool isLoading = true;
+  bool isSubmitting = false;
   String? errorMessage;
-  int currentPage = 1;
-  int totalPages = 1;
-  bool isLoadingMore = false;
-  static const int _pageLimit = 10;
-
-  String? _selectedCategory;
-  bool? _availableOnly;
 
   static const _categories = [
     'VEGETABLES',
@@ -35,121 +29,123 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     'OTHER',
   ];
 
+  String? _selectedCategory;
+  bool? _availableOnly;
+
   @override
   void initState() {
     super.initState();
     fetchProducts();
   }
 
-  Future<void> fetchProducts({bool loadMore = false}) async {
-    if (loadMore && (isLoadingMore || currentPage >= totalPages)) return;
-
+  Future<void> fetchProducts() async {
     setState(() {
-      if (loadMore) {
-        isLoadingMore = true;
-      } else {
-        isLoading = true;
-      }
+      isLoading = true;
       errorMessage = null;
     });
 
-    try {
-      final response = await _apiService.getMyProducts(
-        category: _selectedCategory,
-        available: _availableOnly,
-        page: currentPage,
-        limit: _pageLimit,
-      );
+    final result = await _apiService.fetchMyProducts(
+      category: _selectedCategory,
+      available: _availableOnly,
+      limit: 50,
+    );
 
-      if (response.statusCode == 200 && response.data['success']) {
-        final newProducts = (response.data['data'] as List)
-            .map((json) => Product.fromJson(json))
-            .toList();
+    if (!mounted) return;
 
-        setState(() {
-          if (loadMore) {
-            products.addAll(newProducts);
-          } else {
-            products = newProducts;
-          }
-          totalPages = response.data['pagination']?['pages'] ?? 1;
-          currentPage = response.data['pagination']?['page'] ?? 1;
-          isLoading = isLoadingMore = false;
-        });
-      } else if (response.statusCode == 401) {
-        await _handleUnauthorized();
-      } else {
-        throw Exception(response.data['message'] ?? 'Failed to load products');
-      }
-    } catch (e) {
-      setState(() => errorMessage = e.toString());
-      _showSnackBar('Error: $e', AppColors.error);
-    } finally {
-      if (mounted) setState(() => isLoading = isLoadingMore = false);
+    if (result.unauthorized) {
+      await _handleUnauthorized();
+      return;
     }
+
+    setState(() {
+      isLoading = false;
+      if (result.success) {
+        products = result.products;
+        errorMessage = null;
+      } else {
+        errorMessage = result.message;
+      }
+    });
   }
 
-  Future<void> addProduct(Product product) async {
-    setState(() => isLoading = true);
-    try {
-      final response = await _apiService.createProduct(product.toCreateJson());
+  void _openAddDialog() {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: !isSubmitting,
+      builder: (dialogContext) => AddProductDialog(
+        onSubmit: (product) => addProduct(product, dialogContext),
+      ),
+    );
+  }
 
-      if ((response.statusCode == 200 || response.statusCode == 201) &&
-          response.data['success'] == true) {
-        currentPage = 1;
+  Future<void> addProduct(Product product, BuildContext dialogContext) async {
+    setState(() => isSubmitting = true);
+    try {
+      final result = await _apiService.createProductParsed(product.toCreateJson());
+
+      if (!mounted) return;
+
+      if (result.unauthorized) {
+        await _handleUnauthorized();
+        return;
+      }
+
+      if (result.success) {
         await fetchProducts();
-        if (mounted) Navigator.pop(context);
+        if (dialogContext.mounted) {
+          Navigator.of(dialogContext).pop();
+        }
         _showSnackBar('Product added successfully', AppColors.primary);
-      } else if (response.statusCode == 401) {
-        await _handleUnauthorized();
       } else {
-        throw Exception(response.data['message'] ?? 'Failed to add product');
+        _showSnackBar(result.message ?? 'Failed to add product', AppColors.error);
       }
-    } catch (e) {
-      _showSnackBar('Error: $e', AppColors.error);
     } finally {
-      if (mounted) setState(() => isLoading = false);
+      if (mounted) setState(() => isSubmitting = false);
     }
   }
 
-  Future<void> updateProduct(Product product) async {
+  void _openEditDialog(Product product) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AddProductDialog(
+        product: product,
+        onSubmit: (updated) => updateProduct(updated, dialogContext),
+      ),
+    );
+  }
+
+  Future<void> updateProduct(Product product, BuildContext dialogContext) async {
     if (product.id.isEmpty) {
       _showSnackBar('Invalid product id', AppColors.error);
       return;
     }
 
-    setState(() => isLoading = true);
+    setState(() => isSubmitting = true);
     try {
-      final response = await _apiService.updateProduct(
+      final result = await _apiService.updateProductParsed(
         product.id,
         product.toUpdateJson(),
       );
 
-      if ((response.statusCode == 200 || response.statusCode == 201) &&
-          response.data['success'] == true) {
-        await fetchProducts();
-        if (mounted) Navigator.pop(context);
-        _showSnackBar('Product updated successfully', AppColors.primary);
-      } else if (response.statusCode == 401) {
-        await _handleUnauthorized();
-      } else {
-        throw Exception(response.data['message'] ?? 'Failed to update product');
-      }
-    } catch (e) {
-      _showSnackBar('Error: $e', AppColors.error);
-    } finally {
-      if (mounted) setState(() => isLoading = false);
-    }
-  }
+      if (!mounted) return;
 
-  void _openEditDialog(Product product) {
-    showDialog(
-      context: context,
-      builder: (_) => AddProductDialog(
-        product: product,
-        onSubmit: updateProduct,
-      ),
-    );
+      if (result.unauthorized) {
+        await _handleUnauthorized();
+        return;
+      }
+
+      if (result.success) {
+        await fetchProducts();
+        if (dialogContext.mounted) {
+          Navigator.of(dialogContext).pop();
+        }
+        _showSnackBar('Product updated successfully', AppColors.primary);
+      } else {
+        _showSnackBar(result.message ?? 'Failed to update product', AppColors.error);
+      }
+    } finally {
+      if (mounted) setState(() => isSubmitting = false);
+    }
   }
 
   Future<void> deleteProduct(String id) async {
@@ -161,19 +157,22 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     try {
       final response = await _apiService.deleteProduct(id);
 
+      if (response.statusCode == 401) {
+        await _handleUnauthorized();
+        return;
+      }
+
       if ((response.statusCode == 200 || response.statusCode == 204) &&
           (response.data == null ||
               response.data is! Map ||
               response.data['success'] != false)) {
         await fetchProducts();
         _showSnackBar('Product deleted', AppColors.primary);
-      } else if (response.statusCode == 401) {
-        await _handleUnauthorized();
       } else {
         final message = response.data is Map
             ? response.data['message'] ?? 'Failed to delete product'
             : 'Failed to delete product';
-        throw Exception(message);
+        _showSnackBar(message.toString(), AppColors.error);
       }
     } catch (e) {
       _showSnackBar('Error deleting: $e', AppColors.error);
@@ -185,6 +184,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   }
 
   void _showSnackBar(String msg, Color color) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
@@ -195,7 +195,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   }
 
   void _confirmDelete(String id) {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -249,10 +249,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                     ),
                   ),
                   IconButton(
-                    onPressed: () {
-                      currentPage = 1;
-                      fetchProducts();
-                    },
+                    onPressed: isSubmitting ? null : fetchProducts,
                     style: IconButton.styleFrom(
                       backgroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
@@ -266,10 +263,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   FloatingActionButton.small(
                     heroTag: 'add_product',
                     backgroundColor: AppColors.primary,
-                    onPressed: () => showDialog(
-                      context: context,
-                      builder: (_) => AddProductDialog(onSubmit: addProduct),
-                    ),
+                    onPressed: isSubmitting ? null : _openAddDialog,
                     child: const Icon(Icons.add, color: Colors.white),
                   ),
                 ],
@@ -281,7 +275,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String?>(
-                      value: _selectedCategory,
+                      initialValue: _selectedCategory,
                       decoration: const InputDecoration(
                         labelText: 'Category',
                         contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -292,24 +286,26 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                           (c) => DropdownMenuItem(value: c, child: Text(c)),
                         ),
                       ],
-                      onChanged: (value) {
-                        setState(() => _selectedCategory = value);
-                        currentPage = 1;
-                        fetchProducts();
-                      },
+                      onChanged: isSubmitting
+                          ? null
+                          : (value) {
+                              setState(() => _selectedCategory = value);
+                              fetchProducts();
+                            },
                     ),
                   ),
                   const SizedBox(width: 12),
                   FilterChip(
                     label: const Text('Available'),
                     selected: _availableOnly == true,
-                    onSelected: (selected) {
-                      setState(() {
-                        _availableOnly = selected ? true : null;
-                      });
-                      currentPage = 1;
-                      fetchProducts();
-                    },
+                    onSelected: isSubmitting
+                        ? null
+                        : (selected) {
+                            setState(() {
+                              _availableOnly = selected ? true : null;
+                            });
+                            fetchProducts();
+                          },
                     selectedColor: AppColors.primary.withValues(alpha: 0.15),
                     checkmarkColor: AppColors.primary,
                   ),
@@ -318,10 +314,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             ),
             Expanded(
               child: RefreshIndicator(
-                onRefresh: () async {
-                  currentPage = 1;
-                  await fetchProducts();
-                },
+                onRefresh: fetchProducts,
                 color: AppColors.primary,
                 child: _buildBody(),
               ),
@@ -352,10 +345,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         title: 'Could not load products',
         subtitle: errorMessage!,
         actionLabel: 'Retry',
-        onAction: () {
-          currentPage = 1;
-          fetchProducts();
-        },
+        onAction: fetchProducts,
       );
     }
 
@@ -365,25 +355,14 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         title: 'No products yet',
         subtitle: 'Tap + to list your first product on the marketplace',
         actionLabel: 'Add Product',
-        onAction: () => showDialog(
-          context: context,
-          builder: (_) => AddProductDialog(onSubmit: addProduct),
-        ),
+        onAction: _openAddDialog,
       );
     }
 
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-      itemCount: products.length + (isLoadingMore ? 1 : 0),
+      itemCount: products.length,
       itemBuilder: (context, index) {
-        if (index == products.length) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: CircularProgressIndicator(color: AppColors.primary),
-            ),
-          );
-        }
         return ProductCard(
           product: products[index],
           onEdit: () => _openEditDialog(products[index]),

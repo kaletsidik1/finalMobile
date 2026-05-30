@@ -35,7 +35,7 @@ class _CropRecommendationState extends State<CropRecommendation> {
     final region = profile?.region?.trim();
     _region = (region != null && region.isNotEmpty) ? region : 'Oromia';
 
-    final result = await _api.recommendCropWithDefaults();
+    final result = await _api.recommendCropWithDefaults(region: _region);
     if (!mounted) return;
 
     if (!result.success) {

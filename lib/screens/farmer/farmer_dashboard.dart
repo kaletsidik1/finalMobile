@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../models/crop_model.dart';
+import '../../models/marketplace_summary.dart';
+import '../../models/product_model.dart';
 import '../../models/profile_model.dart';
 import '../../services/api_service.dart';
+import '../../services/farmer_notification_service.dart';
 import '../../services/token_storage.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/logout_helper.dart';
@@ -10,6 +13,7 @@ import '../../widgets/farmer/farmer_dashboard_header.dart';
 import '../../widgets/farmer/farmer_dashboard_sections.dart';
 import '../../widgets/farmer/farmer_weather_card.dart';
 import 'farmer_chat_screen.dart';
+import 'farmer_profile.dart';
 import 'marketplace.dart';
 
 class FarmerDashboard extends StatefulWidget {
@@ -22,10 +26,24 @@ class FarmerDashboard extends StatefulWidget {
 class _FarmerDashboardState extends State<FarmerDashboard> {
   int _selectedIndex = 0;
   final ApiService _apiService = ApiService();
+  final GlobalKey<MarketplaceScreenState> _marketplaceKey = GlobalKey();
+
   UserProfile? _profile;
   bool _isLoadingProfile = true;
+  bool _isLoadingMarketplace = true;
+  List<Product> _products = [];
+  MarketplaceSummary _marketplaceSummary = const MarketplaceSummary();
+  List<FarmerInboxMessage> _notifications = [];
 
   static const _defaultImage = 'assets/images/welcome.png';
+  static const _listingImages = [
+    'assets/images/Crop1.jpg',
+    'assets/images/Crop2.jpg',
+    'assets/images/Crop3.jpg',
+    'assets/images/Crop4.jpg',
+    'assets/images/Crop5.jpg',
+    'assets/images/Crop6.jpg',
+  ];
 
   static const _navItems = [
     AppNavItem(
@@ -45,39 +63,11 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
     ),
   ];
 
-  static const _activeListings = [
-    ActiveListingItem(
-      name: 'Premium Teff',
-      priceLine: 'ETB 6200/qtl',
-      statusLine: '15 qtl',
-      imageAsset: 'assets/images/Crop1.jpg',
-    ),
-    ActiveListingItem(
-      name: 'White Maize',
-      priceLine: 'ETB 2950/qtl',
-      statusLine: '20 qtl',
-      imageAsset: 'assets/images/Crop2.jpg',
-    ),
-    ActiveListingItem(
-      name: 'Sorghum',
-      priceLine: 'ETB 3200/qtl',
-      statusLine: '10 qtl',
-      imageAsset: 'assets/images/Crop3.jpg',
-      statusHighlight: true,
-    ),
-    ActiveListingItem(
-      name: 'Wheat',
-      priceLine: 'ETB 3500/qtl',
-      statusLine: 'Offer Received',
-      imageAsset: 'assets/images/Crop4.jpg',
-      statusHighlight: true,
-    ),
-  ];
-
   @override
   void initState() {
     super.initState();
     _loadProfile();
+    _loadMarketplaceData();
   }
 
   Future<void> _loadProfile() async {
@@ -118,6 +108,51 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
     }
   }
 
+  Future<void> _loadMarketplaceData() async {
+    setState(() => _isLoadingMarketplace = true);
+
+    final result = await _apiService.fetchMyProducts(limit: 50);
+
+    if (!mounted) return;
+
+    if (result.unauthorized) {
+      await logoutAndRedirect(context);
+      return;
+    }
+
+    final products = result.success ? result.products : <Product>[];
+    final readIds = await TokenStorage.getReadNotificationIds();
+
+    setState(() {
+      _products = products;
+      _marketplaceSummary = MarketplaceSummary.fromProducts(products);
+      _notifications = FarmerNotificationService.fromProducts(
+        products,
+        readIds: readIds,
+      );
+      _isLoadingMarketplace = false;
+    });
+  }
+
+  Future<void> _markNotificationRead(String id) async {
+    await TokenStorage.markNotificationRead(id);
+    if (!mounted) return;
+    setState(() {
+      _notifications = _notifications
+          .map((m) => m.id == id ? m.copyWith(isRead: true) : m)
+          .toList();
+    });
+  }
+
+  Future<void> _openEditProfile() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(builder: (_) => const FarmerProfileScreen()),
+    );
+    await _loadProfile();
+    await _loadMarketplaceData();
+  }
+
   String get _farmerName => _profile?.name ?? 'Farmer';
 
   String get _firstName {
@@ -127,13 +162,33 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
 
   String get _cropRegion => _profile?.region?.trim() ?? 'Oromia';
 
-  List<Widget> get _screens => [
-        _buildHomeScreen(),
-        FarmerChatScreen(defaultRegion: _cropRegion),
-        _selectedIndex == 2
-            ? const MarketplaceScreen()
-            : const SizedBox.shrink(),
-      ];
+  String get _profileImageUrl {
+    final url = _profile?.avatarUrl?.trim();
+    if (url != null && url.isNotEmpty) return url;
+    return _defaultImage;
+  }
+
+  List<ActiveListingItem> get _activeListings {
+    final active = _products.where((p) => p.isAvailable && p.stock > 0).toList();
+    return active.take(4).toList().asMap().entries.map((entry) {
+      final p = entry.value;
+      final image = _listingImages[entry.key % _listingImages.length];
+      return ActiveListingItem(
+        name: p.name,
+        priceLine: 'ETB ${p.price.toStringAsFixed(0)}/${p.unit}',
+        statusLine: '${p.stock} ${p.unit}',
+        imageAsset: image,
+        statusHighlight: p.stock < 5,
+      );
+    }).toList();
+  }
+
+  void _onNavTap(int index) {
+    setState(() => _selectedIndex = index);
+    if (index == 0) {
+      _loadMarketplaceData();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -141,11 +196,15 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
       backgroundColor: AppColors.surface,
       body: IndexedStack(
         index: _selectedIndex,
-        children: _screens,
+        children: [
+          _buildHomeScreen(),
+          FarmerChatScreen(defaultRegion: _cropRegion),
+          MarketplaceScreen(key: _marketplaceKey),
+        ],
       ),
       bottomNavigationBar: AppBottomNav(
         currentIndex: _selectedIndex,
-        onTap: (index) => setState(() => _selectedIndex = index),
+        onTap: _onNavTap,
         items: _navItems,
       ),
     );
@@ -168,40 +227,58 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
 
     return ColoredBox(
       color: AppColors.surface,
-      child: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: FarmerDashboardHeader(
-              farmerName: _farmerName,
-              profileImageUrl: _profile?.avatarUrl ?? _defaultImage,
-              onLogout: () => logoutAndRedirect(context),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  FarmerWeatherCard(greetingName: _firstName),
-                  const SizedBox(height: 16),
-                  const FarmerVerificationBanner(),
-                  const SizedBox(height: 16),
-                  const MarketplaceAnalyticsCard(),
-                  const CommodityTickerCard(),
-                  AiCropRecommendationsCard(
-                    region: _cropRegion,
-                    featuredCrop: featuredCrop,
-                  ),
-                  ActiveListingsSection(
-                    listings: _activeListings,
-                    onViewAll: () => setState(() => _selectedIndex = 2),
-                  ),
-                ],
+      child: RefreshIndicator(
+        onRefresh: () async {
+          await _loadProfile();
+          await _loadMarketplaceData();
+          await _marketplaceKey.currentState?.fetchProducts();
+        },
+        color: AppColors.primary,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(
+              child: FarmerDashboardHeader(
+                farmerName: _farmerName,
+                profileImageUrl: _profileImageUrl,
+                messages: _notifications,
+                onNotificationRead: _markNotificationRead,
+                onEditProfile: _openEditProfile,
+                onLogout: () => logoutAndRedirect(context),
               ),
             ),
-          ),
-        ],
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    FarmerWeatherCard(greetingName: _firstName),
+                    const SizedBox(height: 16),
+                    const FarmerVerificationBanner(),
+                    const SizedBox(height: 16),
+                    MarketplaceAnalyticsCard(
+                      summary: _marketplaceSummary,
+                      isLoading: _isLoadingMarketplace,
+                    ),
+                    const CommodityTickerCard(),
+                    AiCropRecommendationsCard(
+                      region: _cropRegion,
+                      featuredCrop: featuredCrop,
+                    ),
+                    ActiveListingsSection(
+                      listings: _activeListings,
+                      onViewAll: () {
+                        setState(() => _selectedIndex = 2);
+                        _marketplaceKey.currentState?.fetchProducts();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

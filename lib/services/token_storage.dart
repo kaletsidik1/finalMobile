@@ -9,6 +9,7 @@ class TokenStorage {
   static const _farmSubtitleKey = 'farm_subtitle';
   static const _farmerLatKey = 'farmer_lat';
   static const _farmerLngKey = 'farmer_lng';
+  static const _readNotificationsKey = 'read_notification_ids';
 
   static Future<void> saveToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
@@ -69,6 +70,21 @@ class TokenStorage {
     return (prefs.getDouble(_farmerLatKey), prefs.getDouble(_farmerLngKey));
   }
 
+  static Future<Set<String>> getReadNotificationIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getStringList(_readNotificationsKey) ?? const []).toSet();
+  }
+
+  static Future<void> markNotificationRead(String id) async {
+    if (id.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final ids = prefs.getStringList(_readNotificationsKey) ?? [];
+    if (!ids.contains(id)) {
+      ids.add(id);
+      await prefs.setStringList(_readNotificationsKey, ids);
+    }
+  }
+
   static Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);
@@ -77,5 +93,6 @@ class TokenStorage {
     await prefs.remove(_farmSubtitleKey);
     await prefs.remove(_farmerLatKey);
     await prefs.remove(_farmerLngKey);
+    await prefs.remove(_readNotificationsKey);
   }
 }

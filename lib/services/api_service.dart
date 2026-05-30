@@ -3,6 +3,7 @@ import 'package:agrimatketapp/config/env_config.dart';
 import 'package:agrimatketapp/data/agriai_metadata.dart';
 import 'package:agrimatketapp/models/agriai_model.dart';
 import 'package:agrimatketapp/models/farm_model.dart';
+import 'package:agrimatketapp/models/product_model.dart';
 import 'package:agrimatketapp/models/profile_model.dart';
 import 'package:agrimatketapp/services/mistral_ai_service.dart';
 import 'package:agrimatketapp/services/token_storage.dart';
@@ -244,6 +245,135 @@ class ApiService {
 
   // ?? Products ????????????????????????????????????????????????????????????
 
+  Future<ProductsListResult> fetchMyProducts({
+    String? category,
+    bool? available,
+    int page = 1,
+    int limit = 50,
+  }) async {
+    try {
+      final response = await getMyProducts(
+        category: category,
+        available: available,
+        page: page,
+        limit: limit,
+      );
+      final status = response.statusCode ?? 0;
+      final body = response.data;
+
+      if (status == 401) {
+        return const ProductsListResult(
+          success: false,
+          message: 'Session expired. Please log in again.',
+          unauthorized: true,
+        );
+      }
+
+      if (status == 200 && body is Map<String, dynamic>) {
+        final success = body['success'] == true || body['success'] == null;
+        if (success) {
+          return ProductsListResult(
+            success: true,
+            products: _parseProductsList(body['data']),
+          );
+        }
+        return ProductsListResult(
+          success: false,
+          message: _messageFromBody(body) ?? 'Failed to load products',
+        );
+      }
+
+      return ProductsListResult(
+        success: false,
+        message: _messageFromBody(body) ?? 'Failed to load products ($status)',
+      );
+    } catch (_) {
+      return const ProductsListResult(
+        success: false,
+        message: 'Could not load your products. Check your connection.',
+      );
+    }
+  }
+
+  List<Product> _parseProductsList(dynamic raw) {
+    if (raw is! List) return [];
+    final products = <Product>[];
+    for (final item in raw) {
+      if (item is Map<String, dynamic>) {
+        try {
+          products.add(Product.fromJson(item));
+        } catch (_) {}
+      }
+    }
+    return products;
+  }
+
+  bool _isProductMutationSuccess(Response response) {
+    final status = response.statusCode ?? 0;
+    if (status == 401) return false;
+    if (status == 200 || status == 201) {
+      final body = response.data;
+      if (body is! Map) return true;
+      return body['success'] != false;
+    }
+    return false;
+  }
+
+  Future<ProductMutationResult> createProductParsed(
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final response = await createProduct(data);
+      if (response.statusCode == 401) {
+        return const ProductMutationResult(
+          success: false,
+          message: 'Session expired. Please log in again.',
+          unauthorized: true,
+        );
+      }
+      if (_isProductMutationSuccess(response)) {
+        return const ProductMutationResult(success: true);
+      }
+      return ProductMutationResult(
+        success: false,
+        message: _messageFromBody(response.data) ?? 'Failed to add product',
+      );
+    } catch (e) {
+      return ProductMutationResult(
+        success: false,
+        message: e.toString().replaceFirst('Exception: ', ''),
+      );
+    }
+  }
+
+  Future<ProductMutationResult> updateProductParsed(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final response = await updateProduct(id, data);
+      if (response.statusCode == 401) {
+        return const ProductMutationResult(
+          success: false,
+          message: 'Session expired. Please log in again.',
+          unauthorized: true,
+        );
+      }
+      if (_isProductMutationSuccess(response)) {
+        return const ProductMutationResult(success: true);
+      }
+      return ProductMutationResult(
+        success: false,
+        message: _messageFromBody(response.data) ?? 'Failed to update product',
+      );
+    } catch (e) {
+      return ProductMutationResult(
+        success: false,
+        message: e.toString().replaceFirst('Exception: ', ''),
+      );
+    }
+  }
+
   Future<Response> getMyProducts({
     String? category,
     bool? available,
@@ -264,6 +394,56 @@ class ApiService {
         .map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
         .join('&');
     return get('${ApiConfig.myProducts}?$query');
+  }
+
+  Future<ProductsListResult> fetchProducts({
+    String? category,
+    bool? available,
+    int page = 1,
+    int limit = 50,
+  }) async {
+    try {
+      final response = await getProducts(
+        category: category,
+        available: available,
+        page: page,
+        limit: limit,
+      );
+      final status = response.statusCode ?? 0;
+      final body = response.data;
+
+      if (status == 401) {
+        return const ProductsListResult(
+          success: false,
+          message: 'Session expired. Please log in again.',
+          unauthorized: true,
+        );
+      }
+
+      if (status == 200 && body is Map<String, dynamic>) {
+        final success = body['success'] == true || body['success'] == null;
+        if (success) {
+          return ProductsListResult(
+            success: true,
+            products: _parseProductsList(body['data']),
+          );
+        }
+        return ProductsListResult(
+          success: false,
+          message: _messageFromBody(body) ?? 'Failed to load products',
+        );
+      }
+
+      return ProductsListResult(
+        success: false,
+        message: _messageFromBody(body) ?? 'Failed to load products ($status)',
+      );
+    } catch (_) {
+      return const ProductsListResult(
+        success: false,
+        message: 'Could not load products. Check your connection.',
+      );
+    }
   }
 
   Future<Response> getProducts({
@@ -393,6 +573,7 @@ class ApiService {
     double ph = 6.5,
     double rainfall = 100,
     String soilColor = 'brown',
+    String? region,
   }) async {
     try {
       final data = await recommendCrop({
@@ -404,6 +585,7 @@ class ApiService {
         'ph': ph,
         'rainfall': rainfall,
         'soil_color': soilColor,
+        if (region != null && region.isNotEmpty) 'region': region,
       });
       final list = <CropRecommendationItem>[];
       final recs = data['recommendations'];
@@ -562,5 +744,31 @@ class AgriAIPriceResult {
     required this.success,
     this.message,
     this.forecast,
+  });
+}
+
+class ProductsListResult {
+  final bool success;
+  final List<Product> products;
+  final String? message;
+  final bool unauthorized;
+
+  const ProductsListResult({
+    required this.success,
+    this.products = const [],
+    this.message,
+    this.unauthorized = false,
+  });
+}
+
+class ProductMutationResult {
+  final bool success;
+  final String? message;
+  final bool unauthorized;
+
+  const ProductMutationResult({
+    required this.success,
+    this.message,
+    this.unauthorized = false,
   });
 }

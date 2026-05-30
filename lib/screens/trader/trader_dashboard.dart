@@ -7,7 +7,9 @@ import '../../utils/logout_helper.dart';
 import '../../widgets/common/app_bottom_nav.dart';
 import '../../widgets/profile_details_card.dart';
 import '../../widgets/welcome_card.dart';
+import '../../widgets/product_detail_sheet.dart';
 import 'trader_products_screen.dart';
+
 class TraderDashboard extends StatefulWidget {
   const TraderDashboard({super.key});
 
@@ -16,7 +18,7 @@ class TraderDashboard extends StatefulWidget {
 }
 
 class _TraderDashboardState extends State<TraderDashboard> {
-  int _selectedIndex = 0;
+  int _selectedIndex = 1;
   final ApiService _apiService = ApiService();
   UserProfile? _profile;
   bool _isLoadingProfile = true;
@@ -32,9 +34,9 @@ class _TraderDashboardState extends State<TraderDashboard> {
       label: 'Home',
     ),
     AppNavItem(
-      icon: Icons.search_outlined,
-      activeIcon: Icons.search_rounded,
-      label: 'Browse',
+      icon: Icons.store_outlined,
+      activeIcon: Icons.store_rounded,
+      label: 'Market',
     ),
     AppNavItem(
       icon: Icons.receipt_long_outlined,
@@ -56,28 +58,23 @@ class _TraderDashboardState extends State<TraderDashboard> {
   }
 
   Future<void> _loadPreviewProducts() async {
-    try {
-      final response = await _apiService.getProducts(
-        available: true,
-        page: 1,
-        limit: 3,
-      );
+    final result = await _apiService.fetchProducts(
+      available: true,
+      page: 1,
+      limit: 3,
+    );
 
-      if (response.statusCode == 200 && response.data['success'] == true) {
-        final list = response.data['data'] as List? ?? [];
-        if (mounted) {
-          setState(() {
-            _previewProducts =
-                list.map((json) => Product.fromJson(json)).toList();
-            _isLoadingPreview = false;
-          });
-        }
-      } else if (mounted) {
-        setState(() => _isLoadingPreview = false);
-      }
-    } catch (_) {
-      if (mounted) setState(() => _isLoadingPreview = false);
+    if (!mounted) return;
+
+    if (result.unauthorized) {
+      await logoutAndRedirect(context);
+      return;
     }
+
+    setState(() {
+      _previewProducts = result.success ? result.products : [];
+      _isLoadingPreview = false;
+    });
   }
 
   Future<void> _loadProfile() async {
@@ -213,15 +210,19 @@ class _TraderDashboardState extends State<TraderDashboard> {
                     ..._previewProducts.map(
                       (p) => Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: TraderProductRow(product: p),
+                        child: TraderProductRow(
+                          product: p,
+                          onTap: () => showProductDetailSheet(context, p),
+                        ),
                       ),
                     ),
-                  const SizedBox(height: 8),                  SizedBox(
+                  const SizedBox(height: 8),
+                  SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       onPressed: () => setState(() => _selectedIndex = 1),
                       icon: const Icon(Icons.arrow_forward_rounded),
-                      label: const Text('Browse All Products'),
+                      label: const Text('Open Market'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.traderAccent,
                         side: const BorderSide(color: AppColors.traderAccent),

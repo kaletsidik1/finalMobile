@@ -3,7 +3,7 @@ import '../../models/product_model.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/logout_helper.dart';
-import '../../widgets/farmer_info_popup.dart';
+import '../../widgets/product_detail_sheet.dart';
 
 class TraderProductsScreen extends StatefulWidget {
   const TraderProductsScreen({super.key});
@@ -19,9 +19,6 @@ class _TraderProductsScreenState extends State<TraderProductsScreen> {
   List<Product> products = [];
   bool isLoading = true;
   String? errorMessage;
-  int currentPage = 1;
-  int totalPages = 1;
-  static const int _pageLimit = 10;
 
   String? _selectedCategory;
   bool? _availableOnly = true;
@@ -59,46 +56,34 @@ class _TraderProductsScreenState extends State<TraderProductsScreen> {
     }).toList();
   }
 
-  void _showFarmerInfoDialog(Product product) {
-    showDialog<void>(
-      context: context,
-      builder: (_) => FarmerInfoPopup(product: product),
-    );
-  }
-
   Future<void> fetchProducts() async {
     setState(() {
       isLoading = true;
       errorMessage = null;
     });
 
-    try {
-      final response = await _apiService.getProducts(
-        category: _selectedCategory,
-        available: _availableOnly,
-        page: currentPage,
-        limit: _pageLimit,
-      );
+    final result = await _apiService.fetchProducts(
+      category: _selectedCategory,
+      available: _availableOnly,
+      limit: 50,
+    );
 
-      if (response.statusCode == 200 && response.data['success'] == true) {
-        final list = response.data['data'] as List? ?? [];
-        setState(() {
-          products = list.map((json) => Product.fromJson(json)).toList();
-          totalPages = response.data['pagination']?['totalPages'] ?? 1;
-          currentPage = response.data['pagination']?['page'] ?? 1;
-          isLoading = false;
-        });
-      } else if (response.statusCode == 401) {
-        if (mounted) await logoutAndRedirect(context);
-      } else {
-        throw Exception(response.data['message'] ?? 'Failed to load products');
-      }
-    } catch (e) {
-      setState(() {
-        errorMessage = e.toString();
-        isLoading = false;
-      });
+    if (!mounted) return;
+
+    if (result.unauthorized) {
+      await logoutAndRedirect(context);
+      return;
     }
+
+    setState(() {
+      isLoading = false;
+      if (result.success) {
+        products = result.products;
+        errorMessage = null;
+      } else {
+        errorMessage = result.message;
+      }
+    });
   }
 
   @override
@@ -112,10 +97,15 @@ class _TraderProductsScreenState extends State<TraderProductsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Browse Market',
+                'Farmer Market',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       fontSize: 24,
                     ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Browse produce listed by farmers',
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 12),
               TextField(
@@ -140,7 +130,7 @@ class _TraderProductsScreenState extends State<TraderProductsScreen> {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String?>(
-                  value: _selectedCategory,
+                  initialValue: _selectedCategory,
                   decoration: const InputDecoration(
                     labelText: 'Category',
                     contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -156,7 +146,6 @@ class _TraderProductsScreenState extends State<TraderProductsScreen> {
                   ],
                   onChanged: (value) {
                     setState(() => _selectedCategory = value);
-                    currentPage = 1;
                     fetchProducts();
                   },
                 ),
@@ -167,7 +156,6 @@ class _TraderProductsScreenState extends State<TraderProductsScreen> {
                 selected: _availableOnly == true,
                 onSelected: (selected) {
                   setState(() => _availableOnly = selected ? true : null);
-                  currentPage = 1;
                   fetchProducts();
                 },
                 selectedColor: AppColors.traderAccent.withValues(alpha: 0.15),
@@ -217,17 +205,14 @@ class _TraderProductsScreenState extends State<TraderProductsScreen> {
     if (items.isEmpty) {
       return Center(
         child: Text(
-          isLoading ? 'Loading products...' : 'No products found',
+          isLoading ? 'Loading products...' : 'No farmer products found',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
       );
     }
 
     return RefreshIndicator(
-      onRefresh: () async {
-        currentPage = 1;
-        await fetchProducts();
-      },
+      onRefresh: fetchProducts,
       color: AppColors.traderAccent,
       child: ListView.builder(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -237,7 +222,7 @@ class _TraderProductsScreenState extends State<TraderProductsScreen> {
             padding: const EdgeInsets.only(bottom: 12),
             child: TraderProductRow(
               product: items[index],
-              onTap: () => _showFarmerInfoDialog(items[index]),
+              onTap: () => showProductDetailSheet(context, items[index]),
             ),
           );
         },
@@ -304,10 +289,10 @@ class TraderProductRow extends StatelessWidget {
                             fontSize: 12,
                           ),
                     ),
-                    if (product.category.isNotEmpty) ...[
+                    if (product.farmer?.name != null) ...[
                       const SizedBox(height: 4),
                       Text(
-                        product.category,
+                        'Farmer: ${product.farmer!.name}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(

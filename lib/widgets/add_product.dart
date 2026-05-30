@@ -297,7 +297,7 @@ class _AddProductDialogState extends State<AddProductDialog> {
   }
 
   Future<void> _submitForm() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate() || _isLoading) return;
     setState(() => _isLoading = true);
 
     final product = Product(
@@ -321,8 +321,11 @@ class _AddProductDialogState extends State<AddProductDialog> {
       isAvailable: widget.product?.isAvailable ?? true,
     );
 
-    await widget.onSubmit(product);
-    if (mounted) setState(() => _isLoading = false);
+    try {
+      await widget.onSubmit(product);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override

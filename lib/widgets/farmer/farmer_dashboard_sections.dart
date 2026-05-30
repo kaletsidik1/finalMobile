@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/crop_model.dart';
+import '../../models/marketplace_summary.dart';
 import '../../theme/app_theme.dart';
 
 class FarmerVerificationBanner extends StatelessWidget {
@@ -46,52 +47,66 @@ class FarmerVerificationBanner extends StatelessWidget {
 }
 
 class MarketplaceAnalyticsCard extends StatelessWidget {
-  const MarketplaceAnalyticsCard({super.key});
+  final MarketplaceSummary summary;
+  final bool isLoading;
+
+  const MarketplaceAnalyticsCard({
+    super.key,
+    required this.summary,
+    this.isLoading = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return _DashboardCard(
       title: 'Marketplace Analytics',
-      subtitle: 'My Sales Summary',
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: _AnalyticsTile(
-                  value: 'ETB 28,500.00',
-                  label: 'this month',
-                ),
+      subtitle: 'From your listings',
+      child: isLoading
+          ? const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _AnalyticsTile(
-                  value: '6',
-                  label: 'Sold items',
+            )
+          : Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _AnalyticsTile(
+                        value: summary.formattedInventoryValue,
+                        label: 'Inventory value',
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _AnalyticsTile(
+                        value: '${summary.soldOrInactiveCount}',
+                        label: 'Inactive / sold out',
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _AnalyticsTile(
-                  value: '12',
-                  label: 'Active Listings',
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _AnalyticsTile(
+                        value: '${summary.activeListings}',
+                        label: 'Active listings',
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _AnalyticsTile(
+                        value: '${summary.lowStockCount}',
+                        label: 'Low stock alerts',
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _AnalyticsTile(
-                  value: '3',
-                  label: 'Unread Offers',
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+              ],
+            ),
     );
   }
 }
@@ -242,11 +257,25 @@ class ActiveListingsSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        LayoutBuilder(
+        if (listings.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: const Text(
+              'No active listings yet. Add products in the Market tab.',
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+          )
+        else
+          LayoutBuilder(
           builder: (context, constraints) {
             const gap = 12.0;
             final count = listings.length;
-            if (count == 0) return const SizedBox.shrink();
 
             return Row(
               crossAxisAlignment: CrossAxisAlignment.start,

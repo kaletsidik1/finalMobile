@@ -9,13 +9,19 @@ import 'screens/auth/signup_screen.dart';
 import 'screens/farmer_signup_screen.dart';
 import 'screens/trader_signup_screen.dart';
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+Future<void> _loadEnv() async {
   try {
     await dotenv.load(fileName: '.env');
-  } catch (_) {
-    // .env is optional until Mistral features are used
-  }
+    return;
+  } catch (_) {}
+  try {
+    await dotenv.load(fileName: '.env.example');
+  } catch (_) {}
+}
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await _loadEnv();
   runApp(const MyApp());
 }
 

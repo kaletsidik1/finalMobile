@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
+import '../profile_avatar_image.dart';
 
 class FarmerInboxMessage {
   final String id;
@@ -15,44 +16,35 @@ class FarmerInboxMessage {
     required this.timeAgo,
     this.isRead = false,
   });
+
+  FarmerInboxMessage copyWith({bool? isRead}) {
+    return FarmerInboxMessage(
+      id: id,
+      title: title,
+      body: body,
+      timeAgo: timeAgo,
+      isRead: isRead ?? this.isRead,
+    );
+  }
 }
 
 class FarmerDashboardHeader extends StatelessWidget {
   final String farmerName;
   final String profileImageUrl;
   final VoidCallback? onLogout;
+  final VoidCallback? onEditProfile;
   final List<FarmerInboxMessage> messages;
+  final ValueChanged<String>? onNotificationRead;
 
   const FarmerDashboardHeader({
     super.key,
     required this.farmerName,
     required this.profileImageUrl,
     this.onLogout,
-    this.messages = _defaultMessages,
+    this.onEditProfile,
+    this.messages = const [],
+    this.onNotificationRead,
   });
-
-  static const _defaultMessages = [
-    FarmerInboxMessage(
-      id: '1',
-      title: 'New offer on Wheat',
-      body: 'A trader offered ETB 3,400/qtl for your wheat listing.',
-      timeAgo: '12 min ago',
-    ),
-    FarmerInboxMessage(
-      id: '2',
-      title: 'Listing viewed',
-      body: 'Your Premium Teff listing was viewed 8 times today.',
-      timeAgo: '2h ago',
-      isRead: true,
-    ),
-    FarmerInboxMessage(
-      id: '3',
-      title: 'Market alert',
-      body: 'Teff prices in Oromia rose 3% this week.',
-      timeAgo: 'Yesterday',
-      isRead: true,
-    ),
-  ];
 
   int get _unreadCount => messages.where((m) => !m.isRead).length;
 
@@ -65,129 +57,9 @@ class FarmerDashboardHeader extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.55,
-          minChildSize: 0.35,
-          maxChildSize: 0.9,
-          builder: (context, scrollController) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 12),
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.border,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                  child: Row(
-                    children: [
-                      Text(
-                        'Messages',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      if (_unreadCount > 0) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            '$_unreadCount new',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: messages.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'No messages yet',
-                            style: TextStyle(color: AppColors.textSecondary),
-                          ),
-                        )
-                      : ListView.separated(
-                          controller: scrollController,
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                          itemCount: messages.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final msg = messages[index];
-                            return ListTile(
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 4,
-                              ),
-                              leading: CircleAvatar(
-                                backgroundColor: msg.isRead
-                                    ? AppColors.surface
-                                    : AppColors.primary.withValues(alpha: 0.15),
-                                child: Icon(
-                                  Icons.mail_outline_rounded,
-                                  color: msg.isRead
-                                      ? AppColors.textSecondary
-                                      : AppColors.primary,
-                                  size: 22,
-                                ),
-                              ),
-                              title: Text(
-                                msg.title,
-                                style: TextStyle(
-                                  fontWeight: msg.isRead
-                                      ? FontWeight.w500
-                                      : FontWeight.w700,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    msg.body,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: AppColors.textSecondary,
-                                      height: 1.35,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    msg.timeAgo,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              isThreeLine: true,
-                            );
-                          },
-                        ),
-                ),
-              ],
-            );
-          },
+        return _NotificationsSheet(
+          initialMessages: messages,
+          onNotificationRead: onNotificationRead,
         );
       },
     );
@@ -218,24 +90,11 @@ class FarmerDashboardHeader extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 20),
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.primary, width: 2),
-                  ),
-                  child: ClipOval(
-                    child: Image.asset(
-                      profileImageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Icon(
-                        Icons.person_rounded,
-                        color: AppColors.primary,
-                        size: 40,
-                      ),
-                    ),
-                  ),
+                ProfileAvatarImage(
+                  imageUrl: profileImageUrl,
+                  size: 72,
+                  borderColor: AppColors.primary,
+                  fallbackIconColor: AppColors.primary,
                 ),
                 const SizedBox(height: 12),
                 Text(
@@ -247,6 +106,24 @@ class FarmerDashboardHeader extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: onEditProfile == null
+                        ? null
+                        : () {
+                            Navigator.pop(ctx);
+                            onEditProfile!();
+                          },
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Edit Profile'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
@@ -367,25 +244,9 @@ class FarmerDashboardHeader extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(
                       children: [
-                        Container(
-                          width: 56,
-                          height: 56,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
-                            color: Colors.white.withValues(alpha: 0.15),
-                          ),
-                          child: ClipOval(
-                            child: Image.asset(
-                              profileImageUrl,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Icon(
-                                Icons.person_rounded,
-                                color: Colors.white,
-                                size: 30,
-                              ),
-                            ),
-                          ),
+                        ProfileAvatarImage(
+                          imageUrl: profileImageUrl,
+                          size: 56,
                         ),
                         const SizedBox(width: 14),
                         Expanded(
@@ -398,6 +259,13 @@ class FarmerDashboardHeader extends StatelessWidget {
                                   color: Colors.white,
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Text(
+                                'Tap to edit profile',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                  fontSize: 12,
                                 ),
                               ),
                             ],
@@ -416,6 +284,214 @@ class FarmerDashboardHeader extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _NotificationsSheet extends StatefulWidget {
+  final List<FarmerInboxMessage> initialMessages;
+  final ValueChanged<String>? onNotificationRead;
+
+  const _NotificationsSheet({
+    required this.initialMessages,
+    this.onNotificationRead,
+  });
+
+  @override
+  State<_NotificationsSheet> createState() => _NotificationsSheetState();
+}
+
+class _NotificationsSheetState extends State<_NotificationsSheet> {
+  late List<FarmerInboxMessage> _messages;
+
+  @override
+  void initState() {
+    super.initState();
+    _messages = List<FarmerInboxMessage>.from(widget.initialMessages);
+  }
+
+  int get _unreadCount => _messages.where((m) => !m.isRead).length;
+
+  void _openNotificationDetail(FarmerInboxMessage message) {
+    if (!message.isRead) {
+      setState(() {
+        _messages = _messages
+            .map((m) => m.id == message.id ? m.copyWith(isRead: true) : m)
+            .toList();
+      });
+      widget.onNotificationRead?.call(message.id);
+    }
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(message.title),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                message.body,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message.timeAgo,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.55,
+      minChildSize: 0.35,
+      maxChildSize: 0.9,
+      builder: (context, scrollController) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 12),
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Row(
+                children: [
+                  Text(
+                    'Notifications',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  if (_unreadCount > 0) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '$_unreadCount new',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            Expanded(
+              child: _messages.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No notifications right now',
+                        style: TextStyle(color: AppColors.textSecondary),
+                      ),
+                    )
+                  : ListView.separated(
+                      controller: scrollController,
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                      itemCount: _messages.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final msg = _messages[index];
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 4,
+                          ),
+                          onTap: () => _openNotificationDetail(msg),
+                          leading: CircleAvatar(
+                            backgroundColor: msg.isRead
+                                ? AppColors.surface
+                                : AppColors.primary.withValues(alpha: 0.15),
+                            child: Icon(
+                              Icons.notifications_outlined,
+                              color: msg.isRead
+                                  ? AppColors.textSecondary
+                                  : AppColors.primary,
+                              size: 22,
+                            ),
+                          ),
+                          title: Text(
+                            msg.title,
+                            style: TextStyle(
+                              fontWeight:
+                                  msg.isRead ? FontWeight.w500 : FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 4),
+                              Text(
+                                msg.body,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.textSecondary,
+                                  height: 1.35,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                msg.timeAgo,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          trailing: const Icon(
+                            Icons.chevron_right_rounded,
+                            color: AppColors.textSecondary,
+                          ),
+                          isThreeLine: true,
+                        );
+                      },
+                    ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
