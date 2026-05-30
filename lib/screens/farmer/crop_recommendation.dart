@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/agriai_model.dart';
 import '../../models/farm_model.dart';
 import '../../services/api_service.dart';
+import '../../services/soil_climate_service.dart';
 import '../../theme/app_theme.dart';
 
 class CropRecommendation extends StatefulWidget {
@@ -23,6 +24,9 @@ class _CropRecommendationState extends State<CropRecommendation> {
   List<Farm> _farms = [];
   Farm? _selectedFarm;
   bool _farmsLoaded = false;
+
+  SoilClimateData? _soilData;
+  bool _isFetchingSoil = false;
 
   @override
   void initState() {
@@ -49,6 +53,33 @@ class _CropRecommendationState extends State<CropRecommendation> {
     await _runRecommendation();
   }
 
+  Future<void> _onFarmSelected(Farm? farm) async {
+    setState(() {
+      _selectedFarm = farm;
+      _soilData = null;
+    });
+
+    if (farm == null) {
+      _runRecommendation();
+      return;
+    }
+
+    final lat = farm.latitude;
+    final lng = farm.longitude;
+
+    if (lat != null && lng != null) {
+      setState(() => _isFetchingSoil = true);
+      final data = await SoilClimateService.fetch(lat, lng);
+      if (!mounted) return;
+      setState(() {
+        _soilData = data;
+        _isFetchingSoil = false;
+      });
+    }
+
+    _runRecommendation();
+  }
+
   Future<void> _runRecommendation() async {
     setState(() {
       _loading = true;
@@ -56,13 +87,13 @@ class _CropRecommendationState extends State<CropRecommendation> {
     });
 
     final result = await _api.recommendCropWithDefaults(
-      nitrogen: _selectedFarm?.nitrogen?.toInt() ?? 50,
-      phosphorus: _selectedFarm?.phosphorus?.toInt() ?? 30,
-      potassium: _selectedFarm?.potassium?.toInt() ?? 20,
-      temperature: _selectedFarm?.temperature ?? 25,
-      humidity: _selectedFarm?.humidity ?? 60,
-      ph: _selectedFarm?.ph ?? 6.5,
-      rainfall: _selectedFarm?.rainfall ?? 100,
+      nitrogen: _selectedFarm?.nitrogen?.toInt() ?? _soilData?.nitrogen?.toInt() ?? 50,
+      phosphorus: _selectedFarm?.phosphorus?.toInt() ?? _soilData?.phosphorus?.toInt() ?? 30,
+      potassium: _selectedFarm?.potassium?.toInt() ?? _soilData?.potassium?.toInt() ?? 20,
+      temperature: _selectedFarm?.temperature ?? _soilData?.temperature ?? 25,
+      humidity: _selectedFarm?.humidity ?? _soilData?.humidity ?? 60,
+      ph: _selectedFarm?.ph ?? _soilData?.ph ?? 6.5,
+      rainfall: _selectedFarm?.rainfall ?? _soilData?.rainfall ?? 100,
       soilColor: _selectedFarm?.soilColor ?? 'brown',
       region: _selectedFarm?.region?.isNotEmpty == true
           ? _selectedFarm!.region
@@ -83,7 +114,7 @@ class _CropRecommendationState extends State<CropRecommendation> {
     if (result.recommendations.isNotEmpty) {
       final topCrop = result.recommendations.first.crop;
       final recRegion = (_selectedFarm?.region?.isNotEmpty == true
-          ? _selectedFarm!.region
+          ? _selectedFarm!.region!
           : _region)!;
       final priceResult = await _api.predictCropPrice(
         cropName: topCrop,
@@ -171,14 +202,25 @@ class _CropRecommendationState extends State<CropRecommendation> {
                         );
                       }).toList(),
                       onChanged: (id) {
-                        setState(() {
-                          _selectedFarm = id != null
-                              ? _farms.firstWhere((f) => f.id == id)
-                              : null;
-                        });
-                        _runRecommendation();
+                        _onFarmSelected(
+                          id != null ? _farms.firstWhere((f) => f.id == id) : null,
+                        );
                       },
                     ),
+                  ),
+                ),
+              if (_selectedFarm != null && _soilData != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    child: _SoilDataCard(data: _soilData!),
+                  ),
+                ),
+              if (_selectedFarm != null && _isFetchingSoil)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    child: _SoilDataLoading(),
                   ),
                 ),
               SliverToBoxAdapter(
@@ -228,6 +270,129 @@ class _CropRecommendationState extends State<CropRecommendation> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SoilDataCard extends StatelessWidget {
+  final SoilClimateData data;
+
+  const _SoilDataCard({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final items = <String, String?>{
+      'Nitrogen (N)': data.nitrogen != null ? '${data.nitrogen!.toStringAsFixed(1)} mg/kg' : null,
+      'Phosphorus (P)': data.phosphorus != null ? '${data.phosphorus!.toStringAsFixed(1)} mg/kg' : null,
+      'Potassium (K)': data.potassium != null ? '${data.potassium!.toStringAsFixed(1)} mg/kg' : null,
+      'pH': data.ph?.toStringAsFixed(1),
+      'Temperature': data.temperature != null ? '${data.temperature!.toStringAsFixed(1)}°C' : null,
+      'Humidity': data.humidity != null ? '${data.humidity!.toStringAsFixed(0)}%' : null,
+      'Rainfall': data.rainfall != null ? '${data.rainfall!.toStringAsFixed(0)} mm' : null,
+    };
+
+    final entries = items.entries.where((e) => e.value != null).toList();
+    if (entries.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.science_rounded, size: 18, color: AppColors.primary),
+              const SizedBox(width: 8),
+              const Text(
+                'Soil Analysis',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Text(
+                  'Auto-detected',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 16,
+            runSpacing: 8,
+            children: entries.map((e) {
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${e.key}: ',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  Text(
+                    e.value!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SoilDataLoading extends StatelessWidget {
+  const _SoilDataLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+      ),
+      child: const Row(
+        children: [
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: 10),
+          Text(
+            'Fetching soil & climate data…',
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
+        ],
       ),
     );
   }

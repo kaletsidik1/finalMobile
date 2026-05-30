@@ -7,8 +7,6 @@ class TokenStorage {
   static const _roleKey = 'user_role';
   static const _userNameKey = 'user_name';
   static const _farmSubtitleKey = 'farm_subtitle';
-  static const _farmerLatKey = 'farmer_lat';
-  static const _farmerLngKey = 'farmer_lng';
   static const _readNotificationsKey = 'read_notification_ids';
 
   static Future<void> saveToken(String token) async {
@@ -56,20 +54,6 @@ class TokenStorage {
     return prefs.getString(_farmSubtitleKey);
   }
 
-  static Future<void> saveFarmerLocation({
-    required double lat,
-    required double lng,
-  }) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_farmerLatKey, lat);
-    await prefs.setDouble(_farmerLngKey, lng);
-  }
-
-  static Future<(double? lat, double? lng)> getFarmerLocation() async {
-    final prefs = await SharedPreferences.getInstance();
-    return (prefs.getDouble(_farmerLatKey), prefs.getDouble(_farmerLngKey));
-  }
-
   static Future<Set<String>> getReadNotificationIds() async {
     final prefs = await SharedPreferences.getInstance();
     return (prefs.getStringList(_readNotificationsKey) ?? const []).toSet();
@@ -91,8 +75,6 @@ class TokenStorage {
     await prefs.remove(_roleKey);
     await prefs.remove(_userNameKey);
     await prefs.remove(_farmSubtitleKey);
-    await prefs.remove(_farmerLatKey);
-    await prefs.remove(_farmerLngKey);
     await prefs.remove(_readNotificationsKey);
   }
 }
