@@ -20,6 +20,7 @@ class ApiConfig {
 
   // Farms
   static const farms = '/farms';
+  static String farm(String id) => '$farms/$id';
 
   // AgriAI
   static const recommendCrop = '/agriai/recommend/crop';
