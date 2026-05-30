@@ -3,12 +3,14 @@ import '../../config/env_config.dart';
 import '../../models/farm_model.dart';
 import '../../services/api_service.dart';
 import '../../services/mistral_ai_service.dart';
+import '../../services/soil_climate_service.dart';
 import '../../theme/app_theme.dart';
 
 class FarmerChatScreen extends StatefulWidget {
   final String? defaultRegion;
+  final VoidCallback? onNavigateToFarms;
 
-  const FarmerChatScreen({super.key, this.defaultRegion});
+  const FarmerChatScreen({super.key, this.defaultRegion, this.onNavigateToFarms});
 
   @override
   State<FarmerChatScreen> createState() => _FarmerChatScreenState();
@@ -20,8 +22,6 @@ class _FarmerChatScreenState extends State<FarmerChatScreen> {
   final ScrollController _scrollController = ScrollController();
   final List<_ChatMessage> _messages = [];
   bool _isTyping = false;
-
-  static const _soilColors = ['brown', 'red', 'black', 'gray', 'yellow'];
 
   @override
   void initState() {
@@ -227,33 +227,39 @@ class _FarmerChatScreenState extends State<FarmerChatScreen> {
   }
 
   void _showCropRecommendationSheet() {
-    final nitrogenCtrl = TextEditingController(text: '90');
-    final phosphorusCtrl = TextEditingController(text: '42');
-    final potassiumCtrl = TextEditingController(text: '43');
-    final tempCtrl = TextEditingController(text: '25');
-    final humidityCtrl = TextEditingController(text: '60');
-    final phCtrl = TextEditingController(text: '6.5');
-    final rainfallCtrl = TextEditingController(text: '100');
-    String soilColor = 'brown';
-    List<Farm> farms = [];
-    Farm? selectedFarm;
+    final _farms = <Farm>[];
+    Farm? _selectedFarm;
+    SoilClimateData? _soilData;
+    bool _loadingFarms = true;
+    bool _isFetchingSoil = false;
+    bool fetchError = false;
 
     _api.getFarms().then((result) {
       if (result.success) {
-        farms = result.farms;
+        _farms.addAll(result.farms);
       }
+      _loadingFarms = false;
     });
 
-    void applyFarm(Farm? farm) {
+    void selectFarm(String? id) {
+      final farm = id != null ? _farms.firstWhere((f) => f.id == id) : null;
+      _selectedFarm = farm;
+      _soilData = null;
+      _isFetchingSoil = false;
+      fetchError = false;
+
       if (farm == null) return;
-      nitrogenCtrl.text = farm.nitrogen?.toInt().toString() ?? '90';
-      phosphorusCtrl.text = farm.phosphorus?.toInt().toString() ?? '42';
-      potassiumCtrl.text = farm.potassium?.toInt().toString() ?? '43';
-      phCtrl.text = farm.ph?.toString() ?? '6.5';
-      tempCtrl.text = farm.temperature?.toInt().toString() ?? '25';
-      humidityCtrl.text = farm.humidity?.toInt().toString() ?? '60';
-      rainfallCtrl.text = farm.rainfall?.toInt().toString() ?? '100';
-      soilColor = farm.soilColor ?? 'brown';
+
+      final lat = farm.latitude;
+      final lng = farm.longitude;
+      if (lat == null || lng == null) return;
+
+      _isFetchingSoil = true;
+      SoilClimateService.fetch(lat, lng).then((data) {
+        _soilData = data;
+        _isFetchingSoil = false;
+        fetchError = data.error != null;
+      });
     }
 
     showModalBottomSheet<void>(
@@ -295,87 +301,187 @@ class _FarmerChatScreenState extends State<FarmerChatScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Enter your soil and climate data for AI recommendations.',
+                      'Select a farm land to get AI recommendations based on its soil data.',
                       style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                     ),
                     const SizedBox(height: 16),
-                    if (farms.isNotEmpty) ...[
+                    if (_loadingFarms)
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(16),
+                          child: CircularProgressIndicator(strokeWidth: 3),
+                        ),
+                      )
+                    else if (_farms.isEmpty) ...[
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Column(
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.info_outline_rounded, color: Colors.orange, size: 20),
+                                SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'No farms registered yet. Add a farm land first to get personalized crop recommendations.',
+                                    style: TextStyle(fontSize: 13, color: Colors.orange),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            widget.onNavigateToFarms?.call();
+                          },
+                          icon: const Icon(Icons.add_circle_outline, size: 18),
+                          label: const Text('Register a Farm'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ] else ...[
                       DropdownButtonFormField<String>(
-                        value: selectedFarm?.id,
-                        decoration: _inputDecoration('Select farm (pre-fill)'),
-                        hint: const Text('Manual entry'),
-                        items: farms
-                            .map((f) => DropdownMenuItem(
-                                  value: f.id,
-                                  child: Text(f.name, overflow: TextOverflow.ellipsis),
-                                ))
-                            .toList(),
+                        value: _selectedFarm?.id,
+                        decoration: InputDecoration(
+                          labelText: 'Choose your farm land *',
+                          labelStyle: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                          hintText: 'Select a farm...',
+                          filled: true,
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: AppColors.border),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: AppColors.border),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                          prefixIcon: const Icon(Icons.agriculture_rounded, color: AppColors.primary),
+                        ),
+                        hint: const Text('Select a farm...'),
+                        items: _farms.map((f) {
+                          final soilInfo = f.soilType != null && f.soilType!.isNotEmpty
+                              ? ' - ${f.soilType!.substring(0, 1).toUpperCase()}${f.soilType!.substring(1)} soil'
+                              : '';
+                          return DropdownMenuItem(
+                            value: f.id,
+                            child: Text(
+                              '${f.name}$soilInfo',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }).toList(),
                         onChanged: (id) {
-                          final farm = id != null
-                              ? farms.firstWhere((f) => f.id == id)
-                              : null;
-                          setSheetState(() {
-                            selectedFarm = farm;
-                            applyFarm(farm);
-                          });
+                          setSheetState(() => selectFarm(id));
                         },
                       ),
-                      const SizedBox(height: 12),
-                    ],
-                    _FormRow(
-                      children: [
-                        _NumberField(label: 'Nitrogen (N)', controller: nitrogenCtrl),
-                        _NumberField(label: 'Phosphorus (P)', controller: phosphorusCtrl),
+                      if (_selectedFarm != null && _isFetchingSoil) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                          ),
+                          child: const Row(
+                            children: [
+                              SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2.5),
+                              ),
+                              SizedBox(width: 12),
+                              Text(
+                                'Fetching soil & climate data...',
+                                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
-                    ),
-                    const SizedBox(height: 12),
-                    _FormRow(
-                      children: [
-                        _NumberField(label: 'Potassium (K)', controller: potassiumCtrl),
-                        _NumberField(label: 'pH', controller: phCtrl),
+                      if (_selectedFarm != null && _soilData != null) ...[
+                        const SizedBox(height: 12),
+                        _ChatSoilDataCard(farm: _selectedFarm!, data: _soilData!),
                       ],
-                    ),
-                    const SizedBox(height: 12),
-                    _FormRow(
-                      children: [
-                        _NumberField(label: 'Temp (°C)', controller: tempCtrl),
-                        _NumberField(label: 'Humidity (%)', controller: humidityCtrl),
+                      if (_selectedFarm != null && fetchError) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18),
+                              const SizedBox(width: 10),
+                              const Expanded(
+                                child: Text(
+                                  'Could not fetch live data. Using default values.',
+                                  style: TextStyle(fontSize: 12, color: Colors.orange),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
-                    ),
-                    const SizedBox(height: 12),
-                    _NumberField(label: 'Rainfall (mm)', controller: rainfallCtrl),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      value: soilColor,
-                      decoration: _inputDecoration('Soil color'),
-                      items: _soilColors
-                          .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                          .toList(),
-                      onChanged: (v) {
-                        if (v != null) setSheetState(() => soilColor = v);
-                      },
-                    ),
-                    const SizedBox(height: 20),
-                    FilledButton(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        _runCropRecommendation({
-                          'nitrogen': int.tryParse(nitrogenCtrl.text) ?? 0,
-                          'phosphorus': int.tryParse(phosphorusCtrl.text) ?? 0,
-                          'potassium': int.tryParse(potassiumCtrl.text) ?? 0,
-                          'temperature': double.tryParse(tempCtrl.text) ?? 25,
-                          'humidity': double.tryParse(humidityCtrl.text) ?? 60,
-                          'ph': double.tryParse(phCtrl.text) ?? 6.5,
-                          'rainfall': double.tryParse(rainfallCtrl.text) ?? 100,
-                          'soil_color': soilColor,
-                        });
-                      },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      const SizedBox(height: 20),
+                      FilledButton(
+                        onPressed: _selectedFarm == null || _isFetchingSoil
+                            ? null
+                            : () {
+                                Navigator.pop(ctx);
+                                _runCropRecommendation({
+                                  'nitrogen': _soilData?.nitrogen?.toInt() ?? 50,
+                                  'phosphorus': _soilData?.phosphorus?.toInt() ?? 30,
+                                  'potassium': _soilData?.potassium?.toInt() ?? 20,
+                                  'temperature': _soilData?.temperature ?? 25,
+                                  'humidity': _soilData?.humidity ?? 60,
+                                  'ph': _soilData?.ph ?? 6.5,
+                                  'rainfall': _soilData?.rainfall ?? 100,
+                                  'soil_color': _selectedFarm?.soilColor ?? 'brown',
+                                });
+                              },
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.4),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const Text(
+                          'Get Recommendation',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                        ),
                       ),
-                      child: const Text('Get Recommendation'),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -824,6 +930,108 @@ class _ChatMessage {
   factory _ChatMessage.user(String text) => _ChatMessage(isUser: true, text: text);
   factory _ChatMessage.assistant(String text) =>
       _ChatMessage(isUser: false, text: text);
+}
+
+class _ChatSoilDataCard extends StatelessWidget {
+  final Farm farm;
+  final SoilClimateData data;
+
+  const _ChatSoilDataCard({required this.farm, required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.science_rounded, size: 18, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  farm.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Text(
+                  'Auto-detected',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _dataRow('Nitrogen (N)', data.nitrogen, 'mg/kg'),
+          _dataRow('pH Level', data.ph, ''),
+          _dataRow('Temperature', data.temperature, '\u00b0C'),
+          _dataRow('Humidity', data.humidity, '%'),
+          _dataRow('Rainfall', data.rainfall, 'mm'),
+          if (farm.soilType != null && farm.soilType!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.layers_rounded, size: 14, color: AppColors.primary),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Soil: ${farm.soilType!.substring(0, 1).toUpperCase()}${farm.soilType!.substring(1)}',
+                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dataRow(String label, double? value, String unit) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value != null ? '${value.toStringAsFixed(0)}$unit' : '--',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _FormRow extends StatelessWidget {
