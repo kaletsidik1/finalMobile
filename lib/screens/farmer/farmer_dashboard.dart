@@ -205,7 +205,10 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
         children: [
           _buildHomeScreen(),
           const FarmsScreen(),
-          FarmerChatScreen(defaultRegion: _cropRegion),
+          FarmerChatScreen(
+            defaultRegion: _cropRegion,
+            onNavigateToFarms: () => setState(() => _selectedIndex = 1),
+          ),
           MarketplaceScreen(key: _marketplaceKey),
         ],
       ),

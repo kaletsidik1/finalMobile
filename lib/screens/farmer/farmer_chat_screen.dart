@@ -8,8 +8,9 @@ import '../../theme/app_theme.dart';
 
 class FarmerChatScreen extends StatefulWidget {
   final String? defaultRegion;
+  final VoidCallback? onNavigateToFarms;
 
-  const FarmerChatScreen({super.key, this.defaultRegion});
+  const FarmerChatScreen({super.key, this.defaultRegion, this.onNavigateToFarms});
 
   @override
   State<FarmerChatScreen> createState() => _FarmerChatScreenState();
@@ -318,17 +319,41 @@ class _FarmerChatScreenState extends State<FarmerChatScreen> {
                           color: Colors.orange.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Row(
+                        child: const Column(
                           children: [
-                            Icon(Icons.info_outline_rounded, color: Colors.orange, size: 20),
-                            SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                'No farms registered yet. Go to Farms tab to add one first.',
-                                style: TextStyle(fontSize: 13, color: Colors.orange),
-                              ),
+                            Row(
+                              children: [
+                                Icon(Icons.info_outline_rounded, color: Colors.orange, size: 20),
+                                SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'No farms registered yet. Add a farm land first to get personalized crop recommendations.',
+                                    style: TextStyle(fontSize: 13, color: Colors.orange),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            widget.onNavigateToFarms?.call();
+                          },
+                          icon: const Icon(Icons.add_circle_outline, size: 18),
+                          label: const Text('Register a Farm'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
                         ),
                       ),
                     ] else ...[
