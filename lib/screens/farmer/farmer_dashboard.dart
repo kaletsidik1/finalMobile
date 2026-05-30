@@ -14,6 +14,7 @@ import '../../widgets/farmer/farmer_dashboard_sections.dart';
 import '../../widgets/farmer/farmer_weather_card.dart';
 import 'farmer_chat_screen.dart';
 import 'farmer_profile.dart';
+import 'farms_screen.dart';
 import 'marketplace.dart';
 
 class FarmerDashboard extends StatefulWidget {
@@ -50,6 +51,11 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
       icon: Icons.home_outlined,
       activeIcon: Icons.home_rounded,
       label: 'Home',
+    ),
+    AppNavItem(
+      icon: Icons.agriculture_outlined,
+      activeIcon: Icons.agriculture_rounded,
+      label: 'Farms',
     ),
     AppNavItem(
       icon: Icons.chat_bubble_outline_rounded,
@@ -198,6 +204,7 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
         index: _selectedIndex,
         children: [
           _buildHomeScreen(),
+          const FarmsScreen(),
           FarmerChatScreen(defaultRegion: _cropRegion),
           MarketplaceScreen(key: _marketplaceKey),
         ],
@@ -269,7 +276,7 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
                     ActiveListingsSection(
                       listings: _activeListings,
                       onViewAll: () {
-                        setState(() => _selectedIndex = 2);
+                        setState(() => _selectedIndex = 3);
                         _marketplaceKey.currentState?.fetchProducts();
                       },
                     ),

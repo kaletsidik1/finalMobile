@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/agriai_model.dart';
+import '../../models/farm_model.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 
@@ -19,13 +20,17 @@ class _CropRecommendationState extends State<CropRecommendation> {
   CropPriceForecast? _topForecast;
   String? _region;
 
+  List<Farm> _farms = [];
+  Farm? _selectedFarm;
+  bool _farmsLoaded = false;
+
   @override
   void initState() {
     super.initState();
-    _loadRecommendations();
+    _load();
   }
 
-  Future<void> _loadRecommendations() async {
+  Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
@@ -35,7 +40,35 @@ class _CropRecommendationState extends State<CropRecommendation> {
     final region = profile?.region?.trim();
     _region = (region != null && region.isNotEmpty) ? region : 'Oromia';
 
-    final result = await _api.recommendCropWithDefaults(region: _region);
+    final farmsResult = await _api.getFarms();
+    if (farmsResult.success) {
+      _farms = farmsResult.farms;
+      _farmsLoaded = true;
+    }
+
+    await _runRecommendation();
+  }
+
+  Future<void> _runRecommendation() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    final result = await _api.recommendCropWithDefaults(
+      nitrogen: _selectedFarm?.nitrogen?.toInt() ?? 50,
+      phosphorus: _selectedFarm?.phosphorus?.toInt() ?? 30,
+      potassium: _selectedFarm?.potassium?.toInt() ?? 20,
+      temperature: _selectedFarm?.temperature ?? 25,
+      humidity: _selectedFarm?.humidity ?? 60,
+      ph: _selectedFarm?.ph ?? 6.5,
+      rainfall: _selectedFarm?.rainfall ?? 100,
+      soilColor: _selectedFarm?.soilColor ?? 'brown',
+      region: _selectedFarm?.region?.isNotEmpty == true
+          ? _selectedFarm!.region
+          : _region,
+    );
+
     if (!mounted) return;
 
     if (!result.success) {
@@ -49,9 +82,12 @@ class _CropRecommendationState extends State<CropRecommendation> {
     CropPriceForecast? forecast;
     if (result.recommendations.isNotEmpty) {
       final topCrop = result.recommendations.first.crop;
+      final recRegion = (_selectedFarm?.region?.isNotEmpty == true
+          ? _selectedFarm!.region
+          : _region)!;
       final priceResult = await _api.predictCropPrice(
         cropName: topCrop,
-        region: _region!,
+        region: recRegion,
       );
       if (priceResult.success) {
         forecast = priceResult.forecast;
@@ -72,7 +108,7 @@ class _CropRecommendationState extends State<CropRecommendation> {
       backgroundColor: AppColors.surface,
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: _loadRecommendations,
+          onRefresh: _load,
           color: AppColors.primary,
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -91,7 +127,7 @@ class _CropRecommendationState extends State<CropRecommendation> {
                         ),
                       ),
                       IconButton(
-                        onPressed: _loading ? null : _loadRecommendations,
+                        onPressed: _loading ? null : _load,
                         icon: const Icon(Icons.refresh_rounded),
                         color: AppColors.primary,
                       ),
@@ -99,13 +135,64 @@ class _CropRecommendationState extends State<CropRecommendation> {
                   ),
                 ),
               ),
+              if (_farmsLoaded && _farms.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedFarm?.id,
+                      decoration: InputDecoration(
+                        labelText: 'Select Farm',
+                        labelStyle: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(color: AppColors.border),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(color: AppColors.border),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                      ),
+                      hint: const Text('All farms (default soil)'),
+                      items: _farms.map((f) {
+                        return DropdownMenuItem(
+                          value: f.id,
+                          child: Text(f.name, overflow: TextOverflow.ellipsis),
+                        );
+                      }).toList(),
+                      onChanged: (id) {
+                        setState(() {
+                          _selectedFarm = id != null
+                              ? _farms.firstWhere((f) => f.id == id)
+                              : null;
+                        });
+                        _runRecommendation();
+                      },
+                    ),
+                  ),
+                ),
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _HeroBanner(region: _region),
+                      _HeroBanner(
+                        region: _selectedFarm?.region?.isNotEmpty == true
+                            ? _selectedFarm!.region
+                            : _region,
+                        farmName: _selectedFarm?.name,
+                      ),
                       if (_topForecast != null) ...[
                         const SizedBox(height: 16),
                         _PriceForecastCard(forecast: _topForecast!),
@@ -124,7 +211,7 @@ class _CropRecommendationState extends State<CropRecommendation> {
                           ),
                         )
                       else if (_error != null)
-                        _ErrorState(message: _error!, onRetry: _loadRecommendations)
+                        _ErrorState(message: _error!, onRetry: _runRecommendation)
                       else if (_recommendations.isEmpty)
                         const _EmptyState()
                       else
@@ -148,8 +235,9 @@ class _CropRecommendationState extends State<CropRecommendation> {
 
 class _HeroBanner extends StatelessWidget {
   final String? region;
+  final String? farmName;
 
-  const _HeroBanner({this.region});
+  const _HeroBanner({this.region, this.farmName});
 
   @override
   Widget build(BuildContext context) {
@@ -182,9 +270,11 @@ class _HeroBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  region != null
-                      ? 'Based on soil data and $region market trends'
-                      : 'Based on soil and regional market trends',
+                  farmName != null
+                      ? 'Based on $farmName soil data'
+                      : region != null
+                          ? 'Based on soil data and $region market trends'
+                          : 'Based on soil and regional market trends',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.9),
                     fontSize: 13,
