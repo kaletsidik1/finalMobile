@@ -2,13 +2,20 @@ import 'package:agrimatketapp/screens/auth/login_screen.dart';
 import 'package:agrimatketapp/screens/farmer/farmer_dashboard.dart';
 import 'package:agrimatketapp/screens/trader/trader_dashboard.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:agrimatketapp/theme/app_theme.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/auth/signup_screen.dart';
 import 'screens/farmer_signup_screen.dart';
 import 'screens/trader_signup_screen.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (_) {
+    // .env is optional until Mistral features are used
+  }
   runApp(const MyApp());
 }
 

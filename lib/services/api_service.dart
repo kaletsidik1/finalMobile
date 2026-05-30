@@ -1,7 +1,10 @@
 import 'package:agrimatketapp/config/api_config.dart';
+import 'package:agrimatketapp/config/env_config.dart';
+import 'package:agrimatketapp/data/agriai_metadata.dart';
 import 'package:agrimatketapp/models/agriai_model.dart';
 import 'package:agrimatketapp/models/farm_model.dart';
 import 'package:agrimatketapp/models/profile_model.dart';
+import 'package:agrimatketapp/services/mistral_ai_service.dart';
 import 'package:agrimatketapp/services/token_storage.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
@@ -89,7 +92,7 @@ class ApiService {
     return client.delete(endpoint);
   }
 
-  // ── Auth ────────────────────────────────────────────────────────────────
+  // ?? Auth ????????????????????????????????????????????????????????????????
 
   Future<AuthResult> register(Map<String, dynamic> payload) async {
     try {
@@ -145,7 +148,7 @@ class ApiService {
     return getProfile() != null;
   }
 
-  // ── Profile ─────────────────────────────────────────────────────────────
+  // ?? Profile ?????????????????????????????????????????????????????????????
 
   Future<UserProfile?> getProfile() async {
     try {
@@ -181,9 +184,17 @@ class ApiService {
           data['success'] == true) {
         final user = data['data'];
         if (user is Map<String, dynamic>) {
+          final profile = UserProfile.fromJson(user);
+          if (profile.name.isNotEmpty) {
+            await TokenStorage.saveUserName(profile.name);
+          }
+          final subtitle = profile.displaySubtitle;
+          if (subtitle.isNotEmpty) {
+            await TokenStorage.saveFarmSubtitle(subtitle);
+          }
           return ProfileMutationResult(
             success: true,
-            profile: UserProfile.fromJson(user),
+            profile: profile,
             message: 'Profile updated',
           );
         }
@@ -231,7 +242,7 @@ class ApiService {
     }
   }
 
-  // ── Products ────────────────────────────────────────────────────────────
+  // ?? Products ????????????????????????????????????????????????????????????
 
   Future<Response> getMyProducts({
     String? category,
@@ -289,38 +300,48 @@ class ApiService {
     return delete('${ApiConfig.products}/$id');
   }
 
-  // ── Farms ───────────────────────────────────────────────────────────────
+  // ?? Farms ???????????????????????????????????????????????????????????????
+
+  List<Farm> _extractFarmsFromResponse(dynamic data) {
+    final farms = <Farm>[];
+    dynamic raw = data;
+    if (data is Map<String, dynamic>) {
+      raw = data['data'] ?? data['farms'];
+    }
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is Map<String, dynamic>) {
+          farms.add(Farm.fromJson(item));
+        }
+      }
+    }
+    return farms;
+  }
 
   Future<FarmsListResult> getFarms() async {
     try {
       final response = await get(ApiConfig.farms);
-      if (response.statusCode == 200) {
-        final data = response.data;
-        if (data is Map<String, dynamic> && data['success'] == true) {
-          final raw = data['data'];
-          final farms = <Farm>[];
-          if (raw is List) {
-            for (final item in raw) {
-              if (item is Map<String, dynamic>) {
-                farms.add(Farm.fromJson(item));
-              }
-            }
-          }
-          return FarmsListResult(success: true, farms: farms);
-        }
+      final status = response.statusCode ?? 0;
+
+      if (status == 200) {
         return FarmsListResult(
-          success: false,
-          message: _messageFromBody(data),
+          success: true,
+          farms: _extractFarmsFromResponse(response.data),
         );
       }
+
+      if (status == 404) {
+        return FarmsListResult(success: true, farms: []);
+      }
+
       return FarmsListResult(
         success: false,
-        message: _messageFromBody(response.data),
+        message: _messageFromBody(response.data) ?? 'Failed to load farms',
       );
     } catch (_) {
       return FarmsListResult(
         success: false,
-        message: 'Network error. Please try again.',
+        message: 'Could not connect. Pull to refresh.',
       );
     }
   }
@@ -349,17 +370,20 @@ class ApiService {
     }
   }
 
-  // ── AgriAI ────────────────────────────────────────────────────────────
+  // ?? AgriAI ????????????????????????????????????????????????????????????
 
-  /// Used by chat screen — returns raw `data` map from backend.
+  /// Crop recommendations via Mistral AI (.env) or backend AgriAI fallback.
   Future<Map<String, dynamic>> recommendCrop(Map<String, dynamic> payload) async {
+    if (EnvConfig.useMistralAi) {
+      return MistralAiService().recommendCrop(payload);
+    }
     final response = await post(ApiConfig.recommendCrop, payload);
     final data = _unwrapData(response);
     if (data != null) return data;
     throw Exception(_errorMessage(response, 'Failed to get crop recommendation'));
   }
 
-  /// Used by crop insights screen — default soil/weather values.
+  /// Used by crop insights screen ? default soil/weather values.
   Future<AgriAIRecommendResult> recommendCropWithDefaults({
     int nitrogen = 50,
     int phosphorus = 30,
@@ -400,6 +424,9 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> predictPrice(Map<String, dynamic> payload) async {
+    if (EnvConfig.useMistralAi) {
+      return MistralAiService().predictPrice(payload);
+    }
     final response = await post(ApiConfig.predictPrice, payload);
     final data = _unwrapData(response);
     if (data != null) return data;
@@ -433,13 +460,16 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getPriceForecasterMetadata() async {
+    if (EnvConfig.useMistralAi) {
+      return AgriAiMetadata.toMap();
+    }
     final response = await get(ApiConfig.priceForecasterMetadata);
     final data = _unwrapData(response);
     if (data != null) return data;
     throw Exception(_errorMessage(response, 'Failed to load forecast options'));
   }
 
-  // ── Helpers ─────────────────────────────────────────────────────────────
+  // ?? Helpers ?????????????????????????????????????????????????????????????
 
   Map<String, dynamic>? _unwrapData(Response response) {
     if (response.statusCode != 200) return null;

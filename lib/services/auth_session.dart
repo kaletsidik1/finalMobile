@@ -32,6 +32,48 @@ class AuthSession {
     return null;
   }
 
+  static String? extractName(Map<String, dynamic> data) {
+    final user = data['user'];
+    if (user is Map<String, dynamic> && user['name'] != null) {
+      return user['name'].toString();
+    }
+    final nested = data['data'];
+    if (nested is Map<String, dynamic>) {
+      final nestedUser = nested['user'];
+      if (nestedUser is Map<String, dynamic> && nestedUser['name'] != null) {
+        return nestedUser['name'].toString();
+      }
+      if (nested['name'] != null) {
+        return nested['name'].toString();
+      }
+    }
+    if (data['name'] != null) {
+      return data['name'].toString();
+    }
+    return null;
+  }
+
+  static String? extractFarmSubtitle(Map<String, dynamic> data) {
+    final user = data['user'];
+    if (user is Map<String, dynamic>) {
+      final location = user['farmLocation']?.toString();
+      if (location != null && location.isNotEmpty) return location;
+      final parts = [user['woreda'], user['region']]
+          .whereType<String>()
+          .where((v) => v.isNotEmpty)
+          .toList();
+      if (parts.isNotEmpty) return parts.join(', ');
+      final region = user['region']?.toString();
+      final woreda = user['woreda']?.toString();
+      final farmSize = user['farmSize']?.toString();
+      final combined = [woreda, region, farmSize]
+          .where((v) => v != null && v.isNotEmpty)
+          .join(' • ');
+      if (combined.isNotEmpty) return combined;
+    }
+    return null;
+  }
+
   static Future<void> saveFromLoginResponse(Map<String, dynamic> data) async {
     final token = extractToken(data);
     if (token != null) {
@@ -43,21 +85,14 @@ class AuthSession {
       await TokenStorage.saveRole(role);
     }
 
-    final user = data['user'];
-    if (user is Map<String, dynamic>) {
-      final name = user['name']?.toString();
-      if (name != null && name.isNotEmpty) {
-        await TokenStorage.saveUserName(name);
-      }
-      final region = user['region']?.toString();
-      final woreda = user['woreda']?.toString();
-      final farmSize = user['farmSize']?.toString();
-      final parts = [woreda, region, farmSize]
-          .where((v) => v != null && v.isNotEmpty)
-          .join(' • ');
-      if (parts.isNotEmpty) {
-        await TokenStorage.saveFarmSubtitle(parts);
-      }
+    final name = extractName(data);
+    if (name != null && name.isNotEmpty) {
+      await TokenStorage.saveUserName(name);
+    }
+
+    final farmSubtitle = extractFarmSubtitle(data);
+    if (farmSubtitle != null && farmSubtitle.isNotEmpty) {
+      await TokenStorage.saveFarmSubtitle(farmSubtitle);
     }
   }
 }
