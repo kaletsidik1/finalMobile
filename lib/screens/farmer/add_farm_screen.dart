@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../constants/farm_options.dart';
 import '../../models/farm_model.dart';
 import '../../services/api_service.dart';
-import '../../services/location_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_dropdown.dart';
@@ -23,6 +22,13 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
   final _api = ApiService();
   final _nameController = TextEditingController();
   final _kebeleController = TextEditingController();
+  final _nitrogenCtrl = TextEditingController();
+  final _phosphorusCtrl = TextEditingController();
+  final _potassiumCtrl = TextEditingController();
+  final _phCtrl = TextEditingController();
+  final _tempCtrl = TextEditingController();
+  final _humidityCtrl = TextEditingController();
+  final _rainfallCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
   String? _soilType;
@@ -30,9 +36,6 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
   String? _region;
   String? _woreda;
   bool _isSaving = false;
-  double? _latitude;
-  double? _longitude;
-  bool _isCapturingLocation = false;
 
   bool get _isEditing => widget.farm != null;
 
@@ -47,8 +50,13 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
       _soilColor = f.soilColor ?? 'brown';
       _region = f.region;
       _woreda = f.woreda;
-      _latitude = f.latitude;
-      _longitude = f.longitude;
+      _nitrogenCtrl.text = f.nitrogen?.toString() ?? '';
+      _phosphorusCtrl.text = f.phosphorus?.toString() ?? '';
+      _potassiumCtrl.text = f.potassium?.toString() ?? '';
+      _phCtrl.text = f.ph?.toString() ?? '';
+      _tempCtrl.text = f.temperature?.toString() ?? '';
+      _humidityCtrl.text = f.humidity?.toString() ?? '';
+      _rainfallCtrl.text = f.rainfall?.toString() ?? '';
     }
   }
 
@@ -56,30 +64,20 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
   void dispose() {
     _nameController.dispose();
     _kebeleController.dispose();
+    _nitrogenCtrl.dispose();
+    _phosphorusCtrl.dispose();
+    _potassiumCtrl.dispose();
+    _phCtrl.dispose();
+    _tempCtrl.dispose();
+    _humidityCtrl.dispose();
+    _rainfallCtrl.dispose();
     super.dispose();
-  }
-
-  Future<void> _captureLocation() async {
-    setState(() => _isCapturingLocation = true);
-    final result = await LocationService.getCurrentPosition();
-    if (!mounted) return;
-    setState(() {
-      _isCapturingLocation = false;
-      if (result.hasCoordinates) {
-        _latitude = result.latitude;
-        _longitude = result.longitude;
-      }
-    });
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isSaving = true);
-
-    if (_latitude == null || _longitude == null) {
-      await _captureLocation();
-    }
 
     final payload = <String, dynamic>{
       'name': _nameController.text.trim(),
@@ -89,8 +87,20 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
       if (_woreda != null && _woreda!.isNotEmpty) 'woreda': _woreda,
       if (_kebeleController.text.trim().isNotEmpty)
         'kebele': _kebeleController.text.trim(),
-      if (_latitude != null) 'latitude': _latitude,
-      if (_longitude != null) 'longitude': _longitude,
+      if (_nitrogenCtrl.text.trim().isNotEmpty)
+        'nitrogen': double.tryParse(_nitrogenCtrl.text.trim()) ?? 0,
+      if (_phosphorusCtrl.text.trim().isNotEmpty)
+        'phosphorus': double.tryParse(_phosphorusCtrl.text.trim()) ?? 0,
+      if (_potassiumCtrl.text.trim().isNotEmpty)
+        'potassium': double.tryParse(_potassiumCtrl.text.trim()) ?? 0,
+      if (_phCtrl.text.trim().isNotEmpty)
+        'ph': double.tryParse(_phCtrl.text.trim()) ?? 0,
+      if (_tempCtrl.text.trim().isNotEmpty)
+        'temperature': double.tryParse(_tempCtrl.text.trim()) ?? 0,
+      if (_humidityCtrl.text.trim().isNotEmpty)
+        'humidity': double.tryParse(_humidityCtrl.text.trim()) ?? 0,
+      if (_rainfallCtrl.text.trim().isNotEmpty)
+        'rainfall': double.tryParse(_rainfallCtrl.text.trim()) ?? 0,
     };
 
     final FarmMutationResult result;
@@ -214,27 +224,96 @@ class _AddFarmScreenState extends State<AddFarmScreen> {
                 hint: 'e.g. Kebele 01',
                 controller: _kebeleController,
               ),
-              if (_isCapturingLocation)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        'Capturing location…',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
+              const SizedBox(height: 16),
+              const Text(
+                'Soil Chemistry (optional)',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
                 ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Used for accurate AI crop recommendations.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary.withValues(alpha: 0.9),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: CustomTextField(
+                      label: 'Nitrogen (N)',
+                      hint: 'mg/kg',
+                      controller: _nitrogenCtrl,
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: CustomTextField(
+                      label: 'Phosphorus (P)',
+                      hint: 'mg/kg',
+                      controller: _phosphorusCtrl,
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: CustomTextField(
+                      label: 'Potassium (K)',
+                      hint: 'mg/kg',
+                      controller: _potassiumCtrl,
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: CustomTextField(
+                      label: 'pH',
+                      hint: '0-14',
+                      controller: _phCtrl,
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: CustomTextField(
+                      label: 'Temp (°C)',
+                      hint: 'e.g. 25',
+                      controller: _tempCtrl,
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: CustomTextField(
+                      label: 'Humidity (%)',
+                      hint: 'e.g. 60',
+                      controller: _humidityCtrl,
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              CustomTextField(
+                label: 'Rainfall (mm)',
+                hint: 'e.g. 100',
+                controller: _rainfallCtrl,
+                keyboardType: TextInputType.number,
+              ),
               const SizedBox(height: 16),
               CustomButton(
                 text: _isEditing ? 'Update Farm' : 'Save Farm',
