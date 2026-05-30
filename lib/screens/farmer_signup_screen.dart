@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../services/auth_session.dart';
-import '../services/location_service.dart';
 import '../services/token_storage.dart';
 import '../theme/app_theme.dart';
 import '../utils/ethiopian_phone.dart';
@@ -39,11 +38,7 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
   String? _selectedExperience;
   PasswordStrength _passwordStrength = PasswordStrength.none;
   bool _isLoading = false;
-  bool _isFetchingLocation = false;
   String? _errorMessage;
-  double? _latitude;
-  double? _longitude;
-  String? _locationMessage;
 
   final List<String> _experienceLevels = [
     'Beginner (0-2 years)',
@@ -51,37 +46,6 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
     'Advanced (6-10 years)',
     'Expert (10+ years)',
   ];
-
-  @override
-  void initState() {
-    super.initState();
-    _captureLocation();
-  }
-
-  Future<void> _captureLocation() async {
-    setState(() {
-      _isFetchingLocation = true;
-      _locationMessage = 'Getting your current location…';
-    });
-
-    final result = await LocationService.getCurrentPosition();
-
-    if (!mounted) return;
-
-    setState(() {
-      _isFetchingLocation = false;
-      if (result.hasCoordinates) {
-        _latitude = result.latitude;
-        _longitude = result.longitude;
-        _locationMessage =
-            'Location captured (${result.latitude!.toStringAsFixed(4)}, ${result.longitude!.toStringAsFixed(4)})';
-      } else {
-        _latitude = null;
-        _longitude = null;
-        _locationMessage = result.error ?? 'Could not get location';
-      }
-    });
-  }
 
   void _onPasswordChanged(String value) {
     setState(() {
@@ -109,22 +73,6 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
       return;
     }
 
-    if (_latitude == null || _longitude == null) {
-      await _captureLocation();
-      if (_latitude == null || _longitude == null) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _locationMessage ?? 'Please allow location access to register.',
-            ),
-            backgroundColor: AppColors.error,
-          ),
-        );
-        return;
-      }
-    }
-
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -138,8 +86,6 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
       'phone': EthiopianPhone.toInternational(_phoneController.text.trim()),
       'region': _selectedRegion,
       'woreda': _selectedWoreda,
-      'latitude': _latitude,
-      'longitude': _longitude,
       if (_farmLocationController.text.trim().isNotEmpty)
         'farmLocation': _farmLocationController.text.trim(),
       if (_farmSizeController.text.trim().isNotEmpty)
@@ -154,10 +100,6 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
     if (result.success && result.raw != null) {
       await AuthSession.saveFromLoginResponse(result.raw!);
       await TokenStorage.saveRole('farmer');
-      await TokenStorage.saveFarmerLocation(
-        lat: _latitude!,
-        lng: _longitude!,
-      );
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -182,8 +124,6 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final locationOk = _latitude != null && _longitude != null;
-
     return AuthShell(
       title: 'Farmer Registration',
       subtitle: 'Tell us about yourself and your farm',
@@ -211,13 +151,6 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
                 ),
                 const SizedBox(height: 12),
               ],
-              _LocationStatusCard(
-                message: _locationMessage,
-                isLoading: _isFetchingLocation,
-                isSuccess: locationOk,
-                onRetry: _captureLocation,
-              ),
-              const SizedBox(height: 8),
               const SectionTitle(
                 title: 'Personal Information',
                 subtitle: 'Your account details',
@@ -362,63 +295,5 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
     _farmSizeController.dispose();
     _cropsController.dispose();
     super.dispose();
-  }
-}
-
-class _LocationStatusCard extends StatelessWidget {
-  final String? message;
-  final bool isLoading;
-  final bool isSuccess;
-  final VoidCallback onRetry;
-
-  const _LocationStatusCard({
-    required this.message,
-    required this.isLoading,
-    required this.isSuccess,
-    required this.onRetry,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = isSuccess
-        ? AppColors.primary
-        : isLoading
-            ? AppColors.textSecondary
-            : AppColors.error;
-
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            isLoading
-                ? Icons.gps_not_fixed
-                : isSuccess
-                    ? Icons.gps_fixed
-                    : Icons.location_off_outlined,
-            size: 20,
-            color: color,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message ?? 'Location status unknown',
-              style: TextStyle(fontSize: 12, color: color),
-            ),
-          ),
-          if (!isLoading)
-            TextButton(
-              onPressed: onRetry,
-              child: const Text('Retry'),
-            ),
-        ],
-      ),
-    );
   }
 }

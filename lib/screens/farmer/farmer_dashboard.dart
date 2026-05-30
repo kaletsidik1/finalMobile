@@ -263,7 +263,9 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
                     FarmerWeatherCard(greetingName: _firstName),
                     const SizedBox(height: 16),
                     const FarmerVerificationBanner(),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
+                    _ManageFarmsCard(onTap: () => _onNavTap(1)),
+                    const SizedBox(height: 12),
                     MarketplaceAnalyticsCard(
                       summary: _marketplaceSummary,
                       isLoading: _isLoadingMarketplace,
@@ -283,6 +285,78 @@ class _FarmerDashboardState extends State<FarmerDashboard> {
                   ],
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ManageFarmsCard extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _ManageFarmsCard({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppColors.primary.withValues(alpha: 0.9),
+              const Color(0xFF3A7D3A),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.agriculture_rounded,
+                color: Colors.white,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Manage Your Farms',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Register, edit or view your farm lands',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: Colors.white.withValues(alpha: 0.7),
+              size: 16,
             ),
           ],
         ),
