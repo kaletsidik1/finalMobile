@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../config/env_config.dart';
+import '../../models/farm_model.dart';
 import '../../services/api_service.dart';
 import '../../services/mistral_ai_service.dart';
 import '../../theme/app_theme.dart';
@@ -234,6 +235,26 @@ class _FarmerChatScreenState extends State<FarmerChatScreen> {
     final phCtrl = TextEditingController(text: '6.5');
     final rainfallCtrl = TextEditingController(text: '100');
     String soilColor = 'brown';
+    List<Farm> farms = [];
+    Farm? selectedFarm;
+
+    _api.getFarms().then((result) {
+      if (result.success) {
+        farms = result.farms;
+      }
+    });
+
+    void applyFarm(Farm? farm) {
+      if (farm == null) return;
+      nitrogenCtrl.text = farm.nitrogen?.toInt().toString() ?? '90';
+      phosphorusCtrl.text = farm.phosphorus?.toInt().toString() ?? '42';
+      potassiumCtrl.text = farm.potassium?.toInt().toString() ?? '43';
+      phCtrl.text = farm.ph?.toString() ?? '6.5';
+      tempCtrl.text = farm.temperature?.toInt().toString() ?? '25';
+      humidityCtrl.text = farm.humidity?.toInt().toString() ?? '60';
+      rainfallCtrl.text = farm.rainfall?.toInt().toString() ?? '100';
+      soilColor = farm.soilColor ?? 'brown';
+    }
 
     showModalBottomSheet<void>(
       context: context,
@@ -278,6 +299,29 @@ class _FarmerChatScreenState extends State<FarmerChatScreen> {
                       style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                     ),
                     const SizedBox(height: 16),
+                    if (farms.isNotEmpty) ...[
+                      DropdownButtonFormField<String>(
+                        value: selectedFarm?.id,
+                        decoration: _inputDecoration('Select farm (pre-fill)'),
+                        hint: const Text('Manual entry'),
+                        items: farms
+                            .map((f) => DropdownMenuItem(
+                                  value: f.id,
+                                  child: Text(f.name, overflow: TextOverflow.ellipsis),
+                                ))
+                            .toList(),
+                        onChanged: (id) {
+                          final farm = id != null
+                              ? farms.firstWhere((f) => f.id == id)
+                              : null;
+                          setSheetState(() {
+                            selectedFarm = farm;
+                            applyFarm(farm);
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     _FormRow(
                       children: [
                         _NumberField(label: 'Nitrogen (N)', controller: nitrogenCtrl),

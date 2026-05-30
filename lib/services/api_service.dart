@@ -526,6 +526,54 @@ class ApiService {
     }
   }
 
+  Future<FarmMutationResult> updateFarm(String id, Map<String, dynamic> payload) async {
+    try {
+      final response = await put(ApiConfig.farm(id), payload);
+      final data = response.data;
+      if (response.statusCode == 200) {
+        if (data is Map<String, dynamic> && data['success'] == true) {
+          return FarmMutationResult(
+            success: true,
+            message: data['message']?.toString(),
+          );
+        }
+      }
+      return FarmMutationResult(
+        success: false,
+        message: _messageFromBody(data) ?? 'Failed to update farm',
+      );
+    } catch (_) {
+      return FarmMutationResult(
+        success: false,
+        message: 'Network error. Please try again.',
+      );
+    }
+  }
+
+  Future<FarmMutationResult> deleteFarm(String id) async {
+    try {
+      final response = await delete(ApiConfig.farm(id));
+      final data = response.data;
+      if (response.statusCode == 200) {
+        return FarmMutationResult(
+          success: true,
+          message: data is Map<String, dynamic>
+              ? data['message']?.toString()
+              : 'Farm deleted',
+        );
+      }
+      return FarmMutationResult(
+        success: false,
+        message: _messageFromBody(data) ?? 'Failed to delete farm',
+      );
+    } catch (_) {
+      return FarmMutationResult(
+        success: false,
+        message: 'Network error. Please try again.',
+      );
+    }
+  }
+
   Future<FarmMutationResult> createFarm(Map<String, dynamic> payload) async {
     try {
       final response = await post(ApiConfig.farms, payload);

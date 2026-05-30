@@ -10,10 +10,10 @@ class FarmsScreen extends StatefulWidget {
   const FarmsScreen({super.key});
 
   @override
-  State<FarmsScreen> createState() => _FarmsScreenState();
+  State<FarmsScreen> createState() => FarmsScreenState();
 }
 
-class _FarmsScreenState extends State<FarmsScreen> {
+class FarmsScreenState extends State<FarmsScreen> {
   final _api = ApiService();
   List<Farm> _farms = [];
   bool _isLoading = true;
@@ -55,9 +55,63 @@ class _FarmsScreenState extends State<FarmsScreen> {
     }
   }
 
+  Future<void> _openEditFarm(Farm farm) async {
+    final updated = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => AddFarmScreen(farm: farm)),
+    );
+    if (updated == true) {
+      _loadFarms();
+    }
+  }
+
+  Future<void> _confirmDelete(Farm farm) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Farm'),
+        content: Text('Are you sure you want to delete "${farm.name}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final result = await _api.deleteFarm(farm.id);
+    if (!mounted) return;
+
+    if (result.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.message ?? 'Farm deleted'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+      _loadFarms();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.message ?? 'Failed to delete farm'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
+    return ColoredBox(
+      color: AppColors.surface,
       child: RefreshIndicator(
         color: AppColors.primary,
         onRefresh: _loadFarms,
@@ -101,7 +155,7 @@ class _FarmsScreenState extends State<FarmsScreen> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                 child: Text(
-                  'Register and manage your farm land.',
+                  'Register and manage your farm land. Tap a farm to edit.',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: AppColors.textSecondary,
                       ),
@@ -143,7 +197,11 @@ class _FarmsScreenState extends State<FarmsScreen> {
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final farm = _farms[index];
-                    return _FarmCard(farm: farm);
+                    return _FarmCard(
+                      farm: farm,
+                      onTap: () => _openEditFarm(farm),
+                      onDelete: () => _confirmDelete(farm),
+                    );
                   },
                 ),
               ),
@@ -156,57 +214,79 @@ class _FarmsScreenState extends State<FarmsScreen> {
 
 class _FarmCard extends StatelessWidget {
   final Farm farm;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
 
-  const _FarmCard({required this.farm});
+  const _FarmCard({
+    required this.farm,
+    required this.onTap,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            farm.name,
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    farm.name,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  if (farm.soilType != null && farm.soilType!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(Icons.eco_outlined, size: 18, color: AppColors.primary),
+                        const SizedBox(width: 8),
+                        Text(
+                          labelForOption(soilTypeOptions, farm.soilType),
+                          style: const TextStyle(color: AppColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.location_on_outlined, size: 18, color: AppColors.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          farm.locationLabel,
+                          style: const TextStyle(color: AppColors.textSecondary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          if (farm.soilType != null && farm.soilType!.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.eco_outlined, size: 18, color: AppColors.primary),
-                const SizedBox(width: 8),
-                Text(
-                  labelForOption(soilTypeOptions, farm.soilType),
-                  style: const TextStyle(color: AppColors.textSecondary),
-                ),
-              ],
+            IconButton(
+              onPressed: onDelete,
+              icon: const Icon(Icons.delete_outline_rounded, size: 20),
+              color: AppColors.error,
+              tooltip: 'Delete farm',
             ),
           ],
-          const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.location_on_outlined, size: 18, color: AppColors.primary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  farm.locationLabel,
-                  style: const TextStyle(color: AppColors.textSecondary),
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
