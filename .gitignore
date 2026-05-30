@@ -108,3 +108,5 @@ tmp/
 *~
 *.swp
 *.swo
+
+session*.md
